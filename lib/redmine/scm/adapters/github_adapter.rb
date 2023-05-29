@@ -8,13 +8,17 @@ module Redmine
           attr_accessor :is_default
         end
 
+        PER_PAGE = 50
+        MAX_PAGES = 10
+
         def initialize(url, root_url=nil, login=nil, password=nil, path_encoding=nil)
           super
 
-          ## Get gitlab project
+          ## Get github project
           @project = url.sub(root_url, '').sub(/^\//, '').sub(/\.git$/, '')
+          @repos = url.gsub("https://github.com/", '')
 
-          ## Set Gitlab endpoint and token
+          ## Set Github endpoint and token
           Octokit.configure do |c|
             c.api_endpoint = "#{root_url}/api/v3/"
             c.access_token = password
@@ -25,6 +29,27 @@ module Redmine
           # unless proxy.nil?
           #   Gitlab.http_proxy(proxy.host, proxy.port, proxy.user, proxy.password)
           # end
+        end
+
+        def branches
+          return @branches if @branches
+          @branches = []
+          1.step do |i|
+            Rails.logger.debug @repos
+          begin
+            github_branches = Octokit.branches(@repos, {page: i, per_page: PER_PAGE})
+          rescue => e
+            Rails.logger.debug e.message
+          end
+            break if github_branches.length == 0
+            github_branches.each do |github_branch|
+              bran = GithubBranch.new(github_branch.name)
+              bran.revision = github_branch.commit.sha
+              bran.scmid = github_branch.commit.sha
+              @branches << bran
+            end
+          end
+          @branches.sort!
         end
       end
     end
