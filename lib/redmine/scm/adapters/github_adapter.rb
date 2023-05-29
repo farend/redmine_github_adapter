@@ -19,10 +19,9 @@ module Redmine
           @repos = url.gsub("https://github.com/", '')
 
           ## Set Github endpoint and token
-          # Octokit.configure do |c|
-          #   c.api_endpoint = "#{root_url}/api/v3/"
-          #   c.access_token = password
-          # end
+          Octokit.configure do |c|
+            c.access_token = password
+          end
 
           ## Set proxy
           # proxy = URI.parse(url).find_proxy
@@ -46,6 +45,55 @@ module Redmine
           end
           @branches.sort!
         end
+
+        def revisions(path, identifier_from, identifier_to, options={})
+          revs = Revisions.new
+          per_page = PER_PAGE
+          per_page = options[:limit].to_i if options[:limit]
+          all = false
+          all = options[:all] if options[:all]
+
+          if all
+            ## STEP 1: Seek start_page
+            start_page = 1
+            0.step do |i|
+              start_page = i * MAX_PAGES + 1
+              github_commits = Octokit.commits(@repos, {all: true, page: start_page, per_page: per_page})
+              if github_commits.length < per_page
+                start_page = start_page - MAX_PAGES if i > 0
+                break
+              end
+            end
+
+            ## Step 2: Get the commits from start_page
+            start_page.step do |i|
+              github_commits = Octokit.commits(@repos, {all: true, page: i, per_page: per_page})
+              break if github_commits.length == 0
+              github_commits.each do |github_commit|
+                files=[]
+                github_commits.delete(github_commit).each do |github_commit_compared|
+                  if github_commit_compared.first == :sha
+                    commit_diff = Octokit.compare(@repos, github_commit_compared.last, github_commit.sha)
+                    files << commit_diff.files
+                  end
+                end
+                revision = Revision.new({
+                  :identifier => github_commit.sha,
+                  :scmid      => github_commit.sha,
+                  :author     => github_commit.author.login,
+                  :time       => github_commit.commit.committer.date,
+                  :message    => github_commit.commit.message,
+                  :paths      => files,
+                  :parents    => github_commit.parents.map(&:sha)
+                })
+                revs << revision
+              end
+            end
+          end
+
+        end
+
+
       end
     end
   end
