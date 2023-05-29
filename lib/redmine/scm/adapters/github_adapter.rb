@@ -19,10 +19,10 @@ module Redmine
           @repos = url.gsub("https://github.com/", '')
 
           ## Set Github endpoint and token
-          Octokit.configure do |c|
-            c.api_endpoint = "#{root_url}/api/v3/"
-            c.access_token = password
-          end
+          # Octokit.configure do |c|
+          #   c.api_endpoint = "#{root_url}/api/v3/"
+          #   c.access_token = password
+          # end
 
           ## Set proxy
           # proxy = URI.parse(url).find_proxy
@@ -35,12 +35,7 @@ module Redmine
           return @branches if @branches
           @branches = []
           1.step do |i|
-            Rails.logger.debug @repos
-          begin
             github_branches = Octokit.branches(@repos, {page: i, per_page: PER_PAGE})
-          rescue => e
-            Rails.logger.debug e.message
-          end
             break if github_branches.length == 0
             github_branches.each do |github_branch|
               bran = GithubBranch.new(github_branch.name)
