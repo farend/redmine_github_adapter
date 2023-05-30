@@ -47,7 +47,6 @@ module Redmine
         end
 
         def entries(path=nil, identifier=nil, options={})
-          Rails.logger.debug "debug; 9"
           path ||= ''
           identifier = 'HEAD' if identifier.nil?
 
@@ -140,12 +139,7 @@ module Redmine
           revs.sort! do |a, b|
             a.time <=> b.time
           end
-          Rails.logger.debug "debug; 13"
-
-          Rails.logger.debug revs
-
           revs
-
         end
 
 
