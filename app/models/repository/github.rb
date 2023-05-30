@@ -98,11 +98,8 @@ class Repository::Github < Repository
   end
   private :save_revision
 
-  def entries(path, rev)
-    # TODO
-  end
-
-  def find_changeset_by_name(rev)
+  def scm_entries(path=nil, identifier=nil)
+    scm.entries(path, identifier, :report_last_commit => report_last_commit)
   end
 
   def latest_changesets(path, rev)

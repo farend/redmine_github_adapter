@@ -46,6 +46,38 @@ module Redmine
           @branches.sort!
         end
 
+        def entries(path=nil, identifier=nil, options={})
+          Rails.logger.debug "debug; 9"
+          path ||= ''
+          identifier = 'HEAD' if identifier.nil?
+
+          entries = Entries.new
+          1.step do |i|
+            files = Octokit.tree(@repos, identifier).tree
+            files = files.select {|file| file.path == path}
+            break if files.length == 0
+
+            files.each do |file|
+              full_path = file.path
+              size = nil
+              unless (file.type == "tree")
+                # 相当するものがないのでとりあえず飛ばす。
+                # github_get_file = Gitlab.get_file(@project, full_path, identifier)
+                # size = gitlab_get_file.size
+              end
+              entries << Entry.new({
+                :name => file.path.dup,
+                :path => file.path.dup,
+                :kind => (file.type == "tree") ? 'dir' : 'file',
+                :size => (file.type == "tree") ? nil : size,
+                :lastrev => options[:report_last_commit] ? lastrev(full_path, identifier) : Revision.new
+              }) unless entries.detect{|entry| entry.name == file.path}
+            end
+          end
+          entries.sort_by_name
+
+        end
+
         def revisions(path, identifier_from, identifier_to, options={})
           revs = Revisions.new
           per_page = PER_PAGE
