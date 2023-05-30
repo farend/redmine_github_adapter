@@ -121,10 +121,29 @@ module Redmine
                 revs << revision
               end
             end
+          else
+            github_commits = Octokit.commits(@repos, identifier_to, { per_page: per_page })
+            github_commits.each do |github_commit|
+              revision = Revision.new({
+                :identifier => github_commit.sha,
+                :scmid      => github_commit.sha,
+                :author     => github_commit.author.login,
+                :time       => github_commit.commit.committer.date,
+                :message    => github_commit.commit.message,
+                :paths      => [],
+                :parents    => github_commit.parents.map(&:sha)
+              })
+              revs << revision
+            end
           end
+
           revs.sort! do |a, b|
             a.time <=> b.time
           end
+          Rails.logger.debug "debug; 13"
+
+          Rails.logger.debug revs
+
           revs
 
         end

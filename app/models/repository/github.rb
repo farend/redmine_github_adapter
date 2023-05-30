@@ -102,7 +102,12 @@ class Repository::Github < Repository
     scm.entries(path, identifier, :report_last_commit => report_last_commit)
   end
 
-  def latest_changesets(path, rev)
+  def latest_changesets(path, rev, limit = 10)
+    revisions = scm.revisions(path, nil, rev, :limit => limit, :all => false)
+    Rails.logger.debug revisions
+
+    return [] if revisions.nil? || revisions.empty?
+    changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
   def properties(path, rev)
