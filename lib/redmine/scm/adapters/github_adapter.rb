@@ -90,6 +90,10 @@ module Redmine
               end
             end
           end
+          revs.sort! do |a, b|
+            a.time <=> b.time
+          end
+          revs
 
         end
 
