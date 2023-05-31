@@ -23,6 +23,7 @@ module Redmine
           # Octokit.configure do |c|
           #   c.access_token =
           # end
+          client = Octokit::Client.new(access_token: password)
 
         end
 
@@ -46,6 +47,9 @@ module Redmine
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
+          files = Octokit.tree(@repos, identifier).tree
+          files = files.select {|file| file.path == path} if path.present?
+          unless files.length == 0
 
           files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
           unless files.length == 0
