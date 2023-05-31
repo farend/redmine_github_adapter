@@ -20,9 +20,9 @@ module Redmine
           @repos = url.gsub("https://github.com/", '')
 
           ## Set Github endpoint and token
-          Octokit.configure do |c|
-            c.access_token = password
-          end
+          # Octokit.configure do |c|
+          #   c.access_token = password
+          # end
 
           ## Set proxy
           # proxy = URI.parse(url).find_proxy
@@ -144,7 +144,6 @@ module Redmine
         end
 
         def default_branch
-          Rails.logger.debug "debug; 17"
           return if branches.blank?
 
           (
@@ -152,6 +151,10 @@ module Redmine
             branches.detect {|b| GIT_DEFAULT_BRANCH_NAMES.include?(b.to_s)} ||
             branches.first
           ).to_s
+        end
+
+        def valid_name?(name)
+          true
         end
 
       end
