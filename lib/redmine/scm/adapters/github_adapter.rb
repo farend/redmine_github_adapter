@@ -49,9 +49,6 @@ module Redmine
           entries = Entries.new
           files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
           unless files.length == 0
-
-          files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
-          unless files.length == 0
             files.each do |file|
               full_path = file.path
               entries << Entry.new({
