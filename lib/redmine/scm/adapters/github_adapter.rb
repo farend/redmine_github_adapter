@@ -23,6 +23,7 @@ module Redmine
           # Octokit.configure do |c|
           #   c.access_token = password
           # end
+          client = Octokit::Client.new(access_token: password)
 
           ## Set proxy
           # proxy = URI.parse(url).find_proxy
@@ -52,30 +53,41 @@ module Redmine
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
-          1.step do |i|
-            files = Octokit.tree(@repos, identifier).tree
-            files = files.select {|file| file.path == path}
-            break if files.length == 0
+          Rails.logger.debug "debug; 2"
+          files = Octokit.tree(@repos, identifier).tree
+          files = files.select {|file| file.path == path} if path.present?
+          unless files.length == 0
 
             files.each do |file|
               full_path = file.path
-              size = nil
-              unless (file.type == "tree")
-                # 相当するものがないのでとりあえず飛ばす。
-                # github_get_file = Gitlab.get_file(@project, full_path, identifier)
-                # size = gitlab_get_file.size
-              end
               entries << Entry.new({
                 :name => file.path.dup,
                 :path => file.path.dup,
                 :kind => (file.type == "tree") ? 'dir' : 'file',
-                :size => (file.type == "tree") ? nil : size,
+                :size => (file.type == "tree") ? nil : file.size,
                 :lastrev => options[:report_last_commit] ? lastrev(full_path, identifier) : Revision.new
               }) unless entries.detect{|entry| entry.name == file.path}
             end
           end
           entries.sort_by_name
 
+        end
+
+
+        def lastrev(path, rev)
+          return nil if path.nil?
+          github_commits = Octokit.commits(@repos, rev, { path: path, per_page: 1 })
+          github_commits.each do |github_commit|
+            return Revision.new({
+              :identifier => github_commit.sha,
+              :scmid      => github_commit.sha,
+              :author     => github_commit.author.login,
+              :time       => github_commit.commit.committer.date,
+              :message    => nil,
+              :paths      => nil
+            })
+          end
+          return nil
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
