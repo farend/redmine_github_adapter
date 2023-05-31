@@ -58,7 +58,6 @@ module Redmine
 
           files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
           unless files.length == 0
-
             files.each do |file|
               full_path = file.path
               entries << Entry.new({
@@ -164,6 +163,32 @@ module Redmine
             branches.detect {|b| GIT_DEFAULT_BRANCH_NAMES.include?(b.to_s)} ||
             branches.first
           ).to_s
+        end
+
+        def entry(path=nil, identifier=nil)
+          Rails.logger.debug "debug; 3"
+          Rails.logger.debug path
+          Rails.logger.debug identifier
+          Rails.logger.debug @parent
+
+          if path.blank?
+            # Root entry
+            Entry.new(:path => '', :kind => 'dir')
+          else
+            # Search for the entry in the parent directory
+            # es = entries(path, identifier,
+            #              options = {:report_last_commit => false})
+            # es ? es.detect {|e| e.name == search_name} : nil
+            Octokit.blob(@repos, path)
+          end
+        end
+
+        def cat(path, identifier=nil)
+          identifier = 'HEAD' if identifier.nil?
+
+          blob = Octokit.blob(@repos, path)
+          content = blob.content
+          blob.encoding == "base64" ? Base64.decode64(content) : content
         end
 
         def valid_name?(name)
