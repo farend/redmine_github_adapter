@@ -109,6 +109,10 @@ class Repository::Github < Repository
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
+  def default_branch
+    scm.default_branch
+  end
+
   def properties(path, rev)
   end
 end

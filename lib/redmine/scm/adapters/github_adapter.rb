@@ -4,6 +4,7 @@ module Redmine
   module Scm
     module Adapters
       class GithubAdapter < AbstractAdapter
+        GIT_DEFAULT_BRANCH_NAMES = %w[main master].freeze
         class GithubBranch < Branch
           attr_accessor :is_default
         end
@@ -142,6 +143,16 @@ module Redmine
           revs
         end
 
+        def default_branch
+          Rails.logger.debug "debug; 17"
+          return if branches.blank?
+
+          (
+            branches.detect(&:is_default) ||
+            branches.detect {|b| GIT_DEFAULT_BRANCH_NAMES.include?(b.to_s)} ||
+            branches.first
+          ).to_s
+        end
 
       end
     end
