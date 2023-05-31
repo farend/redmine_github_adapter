@@ -20,10 +20,10 @@ module Redmine
           @repos = url.gsub("https://github.com/", '')
 
           ## Set Github endpoint and token
-          # Octokit.configure do |c|
-          #   c.access_token = password
-          # end
-          client = Octokit::Client.new(access_token: password)
+          Octokit.configure do |c|
+            c.access_token =
+          end
+          # client = Octokit::Client.new(access_token: password)
 
           ## Set proxy
           # proxy = URI.parse(url).find_proxy
@@ -49,20 +49,21 @@ module Redmine
         end
 
         def entries(path=nil, identifier=nil, options={})
-          path ||= ''
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
           Rails.logger.debug "debug; 2"
-          files = Octokit.tree(@repos, identifier).tree
-          files = files.select {|file| file.path == path} if path.present?
+          Rails.logger.debug path
+          Rails.logger.debug identifier
+
+          files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
           unless files.length == 0
 
             files.each do |file|
               full_path = file.path
               entries << Entry.new({
                 :name => file.path.dup,
-                :path => file.path.dup,
+                :path => file.sha.dup,
                 :kind => (file.type == "tree") ? 'dir' : 'file',
                 :size => (file.type == "tree") ? nil : file.size,
                 :lastrev => options[:report_last_commit] ? lastrev(full_path, identifier) : Revision.new
