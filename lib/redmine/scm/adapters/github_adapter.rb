@@ -112,7 +112,7 @@ module Redmine
                 files=[]
                 github_commits.delete(github_commit).each do |github_commit_compared|
                   if github_commit_compared.first == :sha
-                    commit_diff = Octokit.compare(@repos, github_commit_compared.last, github_commit.sha)
+                    commit_diff = Octokit.compare(@repos, github_commit.sha, github_commit_compared.last)
                     files << commit_diff.files
                   end
                 end
@@ -150,6 +150,59 @@ module Redmine
           revs
         end
 
+        def diff(path, identifier_from, identifier_to=nil)
+          path ||= ''
+          diff = []
+
+          github_diffs = []
+
+          if identifier_to.nil?
+            github_diffs = Octokit.commit(@repos, identifier_from).files
+          else
+            github_diffs = Octokit.compare(@repos, identifier_to, identifier_from).files
+          end
+
+          Rails.logger.debug "debug; 1"
+          Rails.logger.debug github_diffs
+
+          github_diffs.each do |github_diff|
+            if identifier_to.nil? && path.length > 0
+              next unless github_diff.map(&:sha).include? path
+            end
+
+            case github_diff.status
+            when "renamed"
+              diff << "diff"
+              diff << "--- a/#{github_diff.previous_filename}"
+              diff << "+++ b/#{github_diff.filename}"
+            when "added"
+              diff << "diff"
+              diff << "--- /dev/null"
+              diff << "+++ b/#{github_diff.filename}"
+              diff << "@@ -0,0 +1,2 @@"
+              cat(github_diff.sha, nil).split("\n").each do |line|
+                diff << "+#{line}"
+              end
+            when "removed"
+              diff << "diff"
+              diff << "--- a/#{github_diff.filename}"
+              diff << "+++ /dev/null"
+              diff << "@@ -1,2 +0,0 @@"
+              cat(github_diff.sha, nil).split("\n").each do |line|
+                diff << "-#{line}"
+              end
+            else
+              diff << "diff"
+              diff << "--- a/#{github_diff.filename}"
+              diff << "+++ b/#{github_diff.filename}"
+              diff << github_diff.patch&.split("\n")
+            end
+          end
+          diff.flatten!
+          diff.deep_dup
+
+        end
+
         def default_branch
           return if branches.blank?
 
@@ -181,9 +234,9 @@ module Redmine
         def cat(path, identifier=nil)
           identifier = 'HEAD' if identifier.nil?
 
-          blob = Octokit.blob(@repos, path)
           content = blob.content
-          blob.encoding == "base64" ? Base64.decode64(content) : content
+          content = blob.encoding == "base64" ? Base64.decode64(content) : content
+          content.force_encoding 'utf-8'
         end
 
         def valid_name?(name)
