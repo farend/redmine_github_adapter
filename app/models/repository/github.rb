@@ -92,7 +92,7 @@ class Repository::Github < Repository
               :parents      => parents
               )
     unless changeset.new_record?
-      rev.paths.each { |change| changeset.create_change(change) unless change.blank? } # とりあえず、中身がなければスルーする。
+      rev.paths.each { |change| changeset.create_change(change) }
     end
     changeset
   end

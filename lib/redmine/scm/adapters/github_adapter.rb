@@ -109,13 +109,24 @@ module Redmine
               github_commits = Octokit.commits(@repos, {all: true, page: i, per_page: per_page})
               break if github_commits.length == 0
               github_commits.each do |github_commit|
-                files=[]
-                github_commits.delete(github_commit).each do |github_commit_compared|
-                  if github_commit_compared.first == :sha
-                    commit_diff = Octokit.compare(@repos, github_commit.sha, github_commit_compared.last)
-                    files << commit_diff.files
+                commit_diff = Octokit.commit(@repos, github_commit.sha)
+                files = commit_diff.files.map do |f|
+                  h = {}
+                  h[:action] = case f.status
+                  when "removed"
+                    "D"
+                  when "added"
+                    "A"
+                  when "modified"
+                    "M"
+                  else
+                    "M"
                   end
-                end
+
+                  h[:path] = f.filename
+                  h[:from_path] = f[:from_revision] = nil
+                  h
+                end || []
                 revision = Revision.new({
                   :identifier => github_commit.sha,
                   :scmid      => github_commit.sha,
@@ -161,9 +172,6 @@ module Redmine
           else
             github_diffs = Octokit.compare(@repos, identifier_to, identifier_from).files
           end
-
-          Rails.logger.debug "debug; 1"
-          Rails.logger.debug github_diffs
 
           github_diffs.each do |github_diff|
             if identifier_to.nil? && path.length > 0
@@ -234,6 +242,7 @@ module Redmine
         def cat(path, identifier=nil)
           identifier = 'HEAD' if identifier.nil?
 
+          blob = Octokit.blob(@repos, path)
           content = blob.content
           content = blob.encoding == "base64" ? Base64.decode64(content) : content
           content.force_encoding 'utf-8'
