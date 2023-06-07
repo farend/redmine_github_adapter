@@ -21,14 +21,9 @@ module Redmine
 
           ## Set Github endpoint and token
           # Octokit.configure do |c|
-          #   c.access_token = password
+          #   c.access_token =
           # end
 
-          ## Set proxy
-          # proxy = URI.parse(url).find_proxy
-          # unless proxy.nil?
-          #   Gitlab.http_proxy(proxy.host, proxy.port, proxy.user, proxy.password)
-          # end
         end
 
         def branches
@@ -48,34 +43,42 @@ module Redmine
         end
 
         def entries(path=nil, identifier=nil, options={})
-          path ||= ''
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
-          1.step do |i|
-            files = Octokit.tree(@repos, identifier).tree
-            files = files.select {|file| file.path == path}
-            break if files.length == 0
 
+          files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
+          unless files.length == 0
             files.each do |file|
               full_path = file.path
-              size = nil
-              unless (file.type == "tree")
-                # 相当するものがないのでとりあえず飛ばす。
-                # github_get_file = Gitlab.get_file(@project, full_path, identifier)
-                # size = gitlab_get_file.size
-              end
               entries << Entry.new({
                 :name => file.path.dup,
-                :path => file.path.dup,
+                :path => file.sha.dup,
                 :kind => (file.type == "tree") ? 'dir' : 'file',
-                :size => (file.type == "tree") ? nil : size,
+                :size => (file.type == "tree") ? nil : file.size,
                 :lastrev => options[:report_last_commit] ? lastrev(full_path, identifier) : Revision.new
               }) unless entries.detect{|entry| entry.name == file.path}
             end
           end
           entries.sort_by_name
 
+        end
+
+
+        def lastrev(path, rev)
+          return nil if path.nil?
+          github_commits = Octokit.commits(@repos, rev, { path: path, per_page: 1 })
+          github_commits.each do |github_commit|
+            return Revision.new({
+              :identifier => github_commit.sha,
+              :scmid      => github_commit.sha,
+              :author     => github_commit.author.login,
+              :time       => github_commit.commit.committer.date,
+              :message    => nil,
+              :paths      => nil
+            })
+          end
+          return nil
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
@@ -151,6 +154,28 @@ module Redmine
             branches.detect {|b| GIT_DEFAULT_BRANCH_NAMES.include?(b.to_s)} ||
             branches.first
           ).to_s
+        end
+
+        def entry(path=nil, identifier=nil)
+          if path.blank?
+            # Root entry
+            Entry.new(:path => '', :kind => 'dir')
+          else
+            # Search for the entry in the parent directory
+            # es = entries(path, identifier,
+            #              options = {:report_last_commit => false})
+            # es ? es.detect {|e| e.name == search_name} : nil
+            Octokit.blob(@repos, path)
+          end
+        end
+
+        def cat(path, identifier=nil)
+          identifier = 'HEAD' if identifier.nil?
+
+          blob = Octokit.blob(@repos, path)
+          content = blob.content
+          content = blob.encoding == "base64" ? Base64.decode64(content) : content
+          content.force_encoding 'utf-8'
         end
 
         def valid_name?(name)
