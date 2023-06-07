@@ -86,6 +86,11 @@ module Redmine
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
+          rev_path = ""
+          sha_to_path = Octokit.commits(@repos).map do |c|
+            Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
+          end.flatten.each_slice(2).to_h
+          rev_path = sha_to_path[path]
           revs = Revisions.new
           per_page = PER_PAGE
           per_page = options[:limit].to_i if options[:limit]
@@ -97,7 +102,7 @@ module Redmine
             start_page = 1
             0.step do |i|
               start_page = i * MAX_PAGES + 1
-              github_commits = Octokit.commits(@repos, {all: true, page: start_page, per_page: per_page})
+              github_commits = Octokit.commits(@repos, {all: true, path: rev_path, page: start_page, per_page: per_page})
               if github_commits.length < per_page
                 start_page = start_page - MAX_PAGES if i > 0
                 break
@@ -106,7 +111,7 @@ module Redmine
 
             ## Step 2: Get the commits from start_page
             start_page.step do |i|
-              github_commits = Octokit.commits(@repos, {all: true, page: i, per_page: per_page})
+              github_commits = Octokit.commits(@repos, {all: true, path: rev_path, page: i, per_page: per_page})
               break if github_commits.length == 0
               github_commits.each do |github_commit|
                 commit_diff = Octokit.commit(@repos, github_commit.sha)
@@ -140,7 +145,7 @@ module Redmine
               end
             end
           else
-            github_commits = Octokit.commits(@repos, identifier_to, { per_page: per_page })
+            github_commits = Octokit.commits(@repos, identifier_to, { path: rev_path, per_page: per_page })
             github_commits.each do |github_commit|
               revision = Revision.new({
                 :identifier => github_commit.sha,
@@ -211,6 +216,10 @@ module Redmine
 
         end
 
+        def annotate(path, identifier=nil)
+          nil
+        end
+
         def default_branch
           return if branches.blank?
 
@@ -235,7 +244,14 @@ module Redmine
             # es = entries(path, identifier,
             #              options = {:report_last_commit => false})
             # es ? es.detect {|e| e.name == search_name} : nil
-            Octokit.blob(@repos, path)
+            blob = Octokit.blob(@repos, path)
+            blob.kind = blob.type == "tree" ? "dir" : "file"
+            Entry.new({
+                :name => blob.filename,
+                :path => blob.filename,
+                :kind => (blob.type == "tree") ? 'dir' : 'file',
+                :size => (blob.type == "tree") ? nil : blob.size,
+              })
           end
         end
 
