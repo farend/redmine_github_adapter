@@ -20,16 +20,10 @@ module Redmine
           @repos = url.gsub("https://github.com/", '')
 
           ## Set Github endpoint and token
-          Octokit.configure do |c|
-            c.access_token =
-          end
-          # client = Octokit::Client.new(access_token: password)
-
-          ## Set proxy
-          # proxy = URI.parse(url).find_proxy
-          # unless proxy.nil?
-          #   Gitlab.http_proxy(proxy.host, proxy.port, proxy.user, proxy.password)
+          # Octokit.configure do |c|
+          #   c.access_token =
           # end
+
         end
 
         def branches
