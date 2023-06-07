@@ -215,6 +215,10 @@ module Redmine
 
         end
 
+        def annotate(path, identifier=nil)
+          nil
+        end
+
         def default_branch
           return if branches.blank?
 
@@ -256,7 +260,6 @@ module Redmine
           blob = Octokit.blob(@repos, path)
           content = blob.content
           content = blob.encoding == "base64" ? Base64.decode64(content) : content
-          Rails.logger.debug content.force_encoding 'utf-8'
 
           content.force_encoding 'utf-8'
         end
