@@ -17,7 +17,7 @@ module Redmine
 
           ## Get github project
           @project = url.sub(root_url, '').sub(/^\//, '').sub(/\.git$/, '')
-          @repos = url.gsub("https://github.com/", '')
+          @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '')
 
           ## Set Github endpoint and token
           # Octokit.configure do |c|
