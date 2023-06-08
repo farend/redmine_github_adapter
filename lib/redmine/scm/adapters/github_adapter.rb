@@ -20,9 +20,9 @@ module Redmine
           @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '')
 
           ## Set Github endpoint and token
-          # Octokit.configure do |c|
-          #   c.access_token =
-          # end
+          Octokit.configure do |c|
+            c.access_token = password
+          end
 
         end
 
