@@ -233,7 +233,7 @@ module Redmine
           else
             begin
               blob = Octokit.blob(@repos, path)
-            rescue => Octokit::NotFound
+            rescue "Octokit::NotFound"
               blob = Octokit.tree(@repos, path)
             end
             Entry.new({
@@ -257,6 +257,18 @@ module Redmine
 
         def valid_name?(name)
           true
+        end
+
+        module ScmData
+          def self.binary?(data)
+            url = c.contents("NaCl-Ltd/redmine_github_adapter", path: "init.rb")[:download_url]
+            #=> "https://raw.githubusercontent.com/NaCl-Ltd/redmine_github_adapter/main/init.rb?token=xxx...
+            c.get(url)
+            #=> "require 'redmine'\nrequire File.expand_path('../lib/github_repositories_helper_patch', __FILE__)\n\nRedmine::Plugin.register :redmine_github_adapter do\n  name 'Redmine Github Adapter plugin'\n  author '\Author name'\n  description 'This is a plugin for Redmine'\n  version '0.0.1'\n  url 'http://example.com/path/to/plugin'\n  author_url 'http://example.com/about'\n  Redmine::Scm::Base.add \"Github\"\nend\n"
+            content_type = c.last_response.headers['content-type']
+            #=> "text/plain; charset=utf-8"
+            content_type.slice(/charset=.+$/).gsub("charset=", "") == "binary"
+          end
         end
 
       end
