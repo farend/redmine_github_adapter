@@ -46,9 +46,6 @@ module Redmine
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
-          Rails.logger.debug "debug; 2"
-          Rails.logger.debug path
-          Rails.logger.debug identifier
 
           files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
           unless files.length == 0
@@ -230,21 +227,15 @@ module Redmine
         end
 
         def entry(path=nil, identifier=nil)
-          Rails.logger.debug "debug; 3"
-          Rails.logger.debug path
-          Rails.logger.debug identifier
-          Rails.logger.debug @parent
-
           if path.blank?
             # Root entry
             Entry.new(:path => '', :kind => 'dir')
           else
-            # Search for the entry in the parent directory
-            # es = entries(path, identifier,
-            #              options = {:report_last_commit => false})
-            # es ? es.detect {|e| e.name == search_name} : nil
-            blob = Octokit.blob(@repos, path)
-            blob.kind = blob.type == "tree" ? "dir" : "file"
+            begin
+              blob = Octokit.blob(@repos, path)
+            rescue => Octokit::NotFound
+              blob = Octokit.tree(@repos, path)
+            end
             Entry.new({
                 :name => blob.filename,
                 :path => blob.filename,
