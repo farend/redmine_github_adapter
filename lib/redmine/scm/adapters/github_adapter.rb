@@ -81,12 +81,15 @@ module Redmine
           return nil
         end
 
-        def revisions(path, identifier_from, identifier_to, options={})
-          rev_path = ""
-          sha_to_path = Octokit.commits(@repos).map do |c|
+        def get_path_name(path)
+          Octokit.commits(@repos).map do |c|
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
-          end.flatten.each_slice(2).to_h
-          rev_path = sha_to_path[path]
+          end.flatten.each_slice(2).to_h[path]
+        end
+        private :get_path_name
+
+        def revisions(path, identifier_from, identifier_to, options={})
+          rev_path = get_path_name(path) || ""
           revs = Revisions.new
           per_page = PER_PAGE
           per_page = options[:limit].to_i if options[:limit]

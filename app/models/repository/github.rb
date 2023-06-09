@@ -109,6 +109,12 @@ class Repository::Github < Repository
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
+  def relative_path(path)
+    Octokit.commits(@repos).map do |c|
+      Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
+    end.flatten.each_slice(2).to_h[path]
+  end
+
   def default_branch
     scm.default_branch
   end
