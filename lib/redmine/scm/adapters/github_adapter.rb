@@ -86,7 +86,6 @@ module Redmine
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
           end.flatten.each_slice(2).to_h[path]
         end
-        private :get_path_name
 
         def revisions(path, identifier_from, identifier_to, options={})
           rev_path = get_path_name(path) || ""
