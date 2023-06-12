@@ -47,15 +47,15 @@ module Redmine
 
           entries = Entries.new
 
-          files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
+          files = Octokit.contents(@repos, path: path, ref: identifier)
           unless files.length == 0
             files.each do |file|
               full_path = file.path
               entries << Entry.new({
-                :name => file.path.dup,
-                :path => file.sha.dup,
-                :kind => (file.type == "tree") ? 'dir' : 'file',
-                :size => (file.type == "tree") ? nil : file.size,
+                :name => file.name.dup,
+                :path => file.path.dup,
+                :kind => file.type,
+                :size => (file.type == "dir") ? nil : file.size,
                 :lastrev => options[:report_last_commit] ? lastrev(full_path, identifier) : Revision.new
               }) unless entries.detect{|entry| entry.name == file.path}
             end
@@ -88,7 +88,7 @@ module Redmine
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
-          rev_path = get_path_name(path) || ""
+          path ||= ''
           revs = Revisions.new
           per_page = PER_PAGE
           per_page = options[:limit].to_i if options[:limit]
@@ -100,7 +100,7 @@ module Redmine
             start_page = 1
             0.step do |i|
               start_page = i * MAX_PAGES + 1
-              github_commits = Octokit.commits(@repos, {all: true, path: rev_path, page: start_page, per_page: per_page})
+              github_commits = Octokit.commits(@repos, {all: true, path: path, page: start_page, per_page: per_page})
               if github_commits.length < per_page
                 start_page = start_page - MAX_PAGES if i > 0
                 break
@@ -109,7 +109,7 @@ module Redmine
 
             ## Step 2: Get the commits from start_page
             start_page.step do |i|
-              github_commits = Octokit.commits(@repos, {all: true, path: rev_path, page: i, per_page: per_page})
+              github_commits = Octokit.commits(@repos, {all: true, path: path, page: i, per_page: per_page})
               break if github_commits.length == 0
               github_commits.each do |github_commit|
                 commit_diff = Octokit.commit(@repos, github_commit.sha)
@@ -143,7 +143,7 @@ module Redmine
               end
             end
           else
-            github_commits = Octokit.commits(@repos, identifier_to, { path: rev_path, per_page: per_page })
+            github_commits = Octokit.commits(@repos, identifier_to, { path: path, per_page: per_page })
             github_commits.each do |github_commit|
               revision = Revision.new({
                 :identifier => github_commit.sha,
@@ -171,9 +171,9 @@ module Redmine
           github_diffs = []
 
           if identifier_to.nil?
-            github_diffs = Octokit.commit(@repos, identifier_from).files
+            github_diffs = Octokit.commit(@repos, identifier_from, path: path).files
           else
-            github_diffs = Octokit.compare(@repos, identifier_to, identifier_from).files
+            github_diffs = Octokit.compare(@repos, identifier_to, identifier_from, path: path).files
           end
 
           github_diffs.each do |github_diff|
@@ -191,7 +191,7 @@ module Redmine
               diff << "--- /dev/null"
               diff << "+++ b/#{github_diff.filename}"
               diff << "@@ -0,0 +1,2 @@"
-              cat(github_diff.sha, nil).split("\n").each do |line|
+              cat(github_diff.filename, identifier_to).split("\n").each do |line|
                 diff << "+#{line}"
               end
             when "removed"
@@ -199,7 +199,7 @@ module Redmine
               diff << "--- a/#{github_diff.filename}"
               diff << "+++ /dev/null"
               diff << "@@ -1,2 +0,0 @@"
-              cat(github_diff.sha, nil).split("\n").each do |line|
+              cat(github_diff.filename, identifier_from).split("\n").each do |line|
                 diff << "-#{line}"
               end
             else
@@ -229,20 +229,18 @@ module Redmine
         end
 
         def entry(path=nil, identifier=nil)
+          identifier ||= 'HEAD'
           if path.blank?
             # Root entry
             Entry.new(:path => '', :kind => 'dir')
           else
-            begin
-              blob = Octokit.blob(@repos, path)
-            rescue "Octokit::NotFound"
-              blob = Octokit.tree(@repos, path)
-            end
+            content = Octokit.contents(@repos, path: path, sha: identifier)
+
             Entry.new({
-                :name => blob.filename,
-                :path => blob.filename,
-                :kind => (blob.type == "tree") ? 'dir' : 'file',
-                :size => (blob.type == "tree") ? nil : blob.size,
+                :name => content.name,
+                :path => content.path,
+                :kind => content.type,
+                :size => (content.type == "dir") ? nil : content.size,
               })
           end
         end
@@ -250,10 +248,19 @@ module Redmine
         def cat(path, identifier=nil)
           identifier = 'HEAD' if identifier.nil?
 
-          blob = Octokit.blob(@repos, path)
-          content = blob.content
-          content = blob.encoding == "base64" ? Base64.decode64(content) : content
+        begin
+          blob = Octokit.contents(@repos, path: path, sha: identifier)
+          url = blob.download_url
+        rescue Octokit::NotFound
+          commit = Octokit.commit(@repos, identifier).files.select{|c| c.filename == path }.first
+          blob = Octokit.blob(@repos, commit.sha)
+          url = commit.raw_url
+        end
+          Octokit.get url
+          content_type = Octokit.last_response.headers['content-type'].slice(/charset=.+$/)&.gsub("charset=", "")
+          return '' if content_type == "binary" || content_type.nil?
 
+          content = blob.encoding == "base64" ? Base64.decode64(blob.content) : blob.content
           content.force_encoding 'utf-8'
         end
 
@@ -261,19 +268,8 @@ module Redmine
           true
         end
 
-        module ScmData
-          def self.binary?(data)
-            url = c.contents("NaCl-Ltd/redmine_github_adapter", path: "init.rb")[:download_url]
-            #=> "https://raw.githubusercontent.com/NaCl-Ltd/redmine_github_adapter/main/init.rb?token=xxx...
-            c.get(url)
-            #=> "require 'redmine'\nrequire File.expand_path('../lib/github_repositories_helper_patch', __FILE__)\n\nRedmine::Plugin.register :redmine_github_adapter do\n  name 'Redmine Github Adapter plugin'\n  author '\Author name'\n  description 'This is a plugin for Redmine'\n  version '0.0.1'\n  url 'http://example.com/path/to/plugin'\n  author_url 'http://example.com/about'\n  Redmine::Scm::Base.add \"Github\"\nend\n"
-            content_type = c.last_response.headers['content-type']
-            #=> "text/plain; charset=utf-8"
-            content_type.slice(/charset=.+$/).gsub("charset=", "") == "binary"
-          end
-        end
-
       end
+
     end
   end
 end

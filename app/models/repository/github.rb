@@ -109,10 +109,6 @@ class Repository::Github < Repository
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
-  def relative_path(path)
-    get_path_name(path)
-  end
-
   def default_branch
     scm.default_branch
   end
