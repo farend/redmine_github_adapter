@@ -17,7 +17,7 @@ module Redmine
 
           ## Get github project
           @project = url.sub(root_url, '').sub(/^\//, '').sub(/\.git$/, '')
-          @repos = url.gsub("https://github.com/", '')
+          @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '')
 
           ## Set Github endpoint and token
           # Octokit.configure do |c|
@@ -46,6 +46,9 @@ module Redmine
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
+          Rails.logger.debug "debug; 2"
+          Rails.logger.debug path
+          Rails.logger.debug identifier
 
           files = Octokit.tree(@repos, (path.present? ? path : identifier)).tree
           unless files.length == 0
@@ -82,6 +85,11 @@ module Redmine
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
+          rev_path = ""
+          sha_to_path = Octokit.commits(@repos).map do |c|
+            Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
+          end.flatten.each_slice(2).to_h
+          rev_path = sha_to_path[path]
           revs = Revisions.new
           per_page = PER_PAGE
           per_page = options[:limit].to_i if options[:limit]
@@ -93,7 +101,7 @@ module Redmine
             start_page = 1
             0.step do |i|
               start_page = i * MAX_PAGES + 1
-              github_commits = Octokit.commits(@repos, {all: true, page: start_page, per_page: per_page})
+              github_commits = Octokit.commits(@repos, {all: true, path: rev_path, page: start_page, per_page: per_page})
               if github_commits.length < per_page
                 start_page = start_page - MAX_PAGES if i > 0
                 break
@@ -102,16 +110,27 @@ module Redmine
 
             ## Step 2: Get the commits from start_page
             start_page.step do |i|
-              github_commits = Octokit.commits(@repos, {all: true, page: i, per_page: per_page})
+              github_commits = Octokit.commits(@repos, {all: true, path: rev_path, page: i, per_page: per_page})
               break if github_commits.length == 0
               github_commits.each do |github_commit|
-                files=[]
-                github_commits.delete(github_commit).each do |github_commit_compared|
-                  if github_commit_compared.first == :sha
-                    commit_diff = Octokit.compare(@repos, github_commit_compared.last, github_commit.sha)
-                    files << commit_diff.files
+                commit_diff = Octokit.commit(@repos, github_commit.sha)
+                files = commit_diff.files.map do |f|
+                  h = {}
+                  h[:action] = case f.status
+                  when "removed"
+                    "D"
+                  when "added"
+                    "A"
+                  when "modified"
+                    "M"
+                  else
+                    "M"
                   end
-                end
+
+                  h[:path] = f.filename
+                  h[:from_path] = f[:from_revision] = nil
+                  h
+                end || []
                 revision = Revision.new({
                   :identifier => github_commit.sha,
                   :scmid      => github_commit.sha,
@@ -125,7 +144,7 @@ module Redmine
               end
             end
           else
-            github_commits = Octokit.commits(@repos, identifier_to, { per_page: per_page })
+            github_commits = Octokit.commits(@repos, identifier_to, { path: rev_path, per_page: per_page })
             github_commits.each do |github_commit|
               revision = Revision.new({
                 :identifier => github_commit.sha,
@@ -146,6 +165,60 @@ module Redmine
           revs
         end
 
+        def diff(path, identifier_from, identifier_to=nil)
+          path ||= ''
+          diff = []
+
+          github_diffs = []
+
+          if identifier_to.nil?
+            github_diffs = Octokit.commit(@repos, identifier_from).files
+          else
+            github_diffs = Octokit.compare(@repos, identifier_to, identifier_from).files
+          end
+
+          github_diffs.each do |github_diff|
+            if identifier_to.nil? && path.length > 0
+              next unless github_diff.map(&:sha).include? path
+            end
+
+            case github_diff.status
+            when "renamed"
+              diff << "diff"
+              diff << "--- a/#{github_diff.previous_filename}"
+              diff << "+++ b/#{github_diff.filename}"
+            when "added"
+              diff << "diff"
+              diff << "--- /dev/null"
+              diff << "+++ b/#{github_diff.filename}"
+              diff << "@@ -0,0 +1,2 @@"
+              cat(github_diff.sha, nil).split("\n").each do |line|
+                diff << "+#{line}"
+              end
+            when "removed"
+              diff << "diff"
+              diff << "--- a/#{github_diff.filename}"
+              diff << "+++ /dev/null"
+              diff << "@@ -1,2 +0,0 @@"
+              cat(github_diff.sha, nil).split("\n").each do |line|
+                diff << "-#{line}"
+              end
+            else
+              diff << "diff"
+              diff << "--- a/#{github_diff.filename}"
+              diff << "+++ b/#{github_diff.filename}"
+              diff << github_diff.patch&.split("\n")
+            end
+          end
+          diff.flatten!
+          diff.deep_dup
+
+        end
+
+        def annotate(path, identifier=nil)
+          nil
+        end
+
         def default_branch
           return if branches.blank?
 
@@ -157,6 +230,11 @@ module Redmine
         end
 
         def entry(path=nil, identifier=nil)
+          Rails.logger.debug "debug; 3"
+          Rails.logger.debug path
+          Rails.logger.debug identifier
+          Rails.logger.debug @parent
+
           if path.blank?
             # Root entry
             Entry.new(:path => '', :kind => 'dir')
@@ -165,7 +243,14 @@ module Redmine
             # es = entries(path, identifier,
             #              options = {:report_last_commit => false})
             # es ? es.detect {|e| e.name == search_name} : nil
-            Octokit.blob(@repos, path)
+            blob = Octokit.blob(@repos, path)
+            blob.kind = blob.type == "tree" ? "dir" : "file"
+            Entry.new({
+                :name => blob.filename,
+                :path => blob.filename,
+                :kind => (blob.type == "tree") ? 'dir' : 'file',
+                :size => (blob.type == "tree") ? nil : blob.size,
+              })
           end
         end
 
@@ -175,6 +260,7 @@ module Redmine
           blob = Octokit.blob(@repos, path)
           content = blob.content
           content = blob.encoding == "base64" ? Base64.decode64(content) : content
+
           content.force_encoding 'utf-8'
         end
 
