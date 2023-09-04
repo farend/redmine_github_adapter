@@ -42,32 +42,9 @@ class Repository::Github < Repository
     }
 
     revisions = scm.revisions('', nil, nil, opts)
-
-    limit = 100
-    offset = 0
     revisions_copy = revisions.clone # revisions will change
-    while offset < revisions_copy.size
-      scmids = revisions_copy.slice(offset, limit).map(&:scmid)
-      # Subtract revisions that redmine already knows about
-      recent_revisions = changesets.where(scmid: scmids).pluck(:scmid)
-      revisions.reject!{|r| recent_revisions.include?(r.scmid)}
-      offset += limit
-    end
 
-    scm.get_filechanges_and_append_to(revisions)
-
-    transaction do
-      revisions.each do |rev|
-        # There is no search in the db for this revision, because above we ensured,
-        # that it's not in the db.
-        save_revision!(rev)
-      end
-      revisions.each do |rev|
-        changeset = changesets.find_by(revision: rev.identifier)
-        changeset.parents = (rev.parents || []).map{|rp| find_changeset_by_name(rp) }.compact
-        changeset.save!
-      end
-    end
+    save_revisions!(revisions, revisions_copy)
 
     h = {}
 
@@ -82,24 +59,46 @@ class Repository::Github < Repository
     end
 
     merge_extra_info(h)
-    save(:validate => false)
+    save(validate: false)
   end
 
-  def save_revision!(rev)
-    changeset = Changeset.create!(
-              :repository   => self,
-              :revision     => rev.identifier,
-              :scmid        => rev.scmid,
-              :committer    => rev.author,
-              :committed_on => rev.time,
-              :comments     => rev.message,
-              )
-    unless changeset.new_record?
-      rev.paths.each { |change| changeset.create_change(change) }
+  def save_revisions!(revisions, revisions_copy)
+    limit = 100
+    offset = 0
+    while offset < revisions_copy.size
+      scmids = revisions_copy.slice(offset, limit).map(&:scmid)
+      # Subtract revisions that redmine already knows about
+      recent_revisions = changesets.where(scmid: scmids).pluck(:scmid)
+      revisions.reject!{|r| recent_revisions.include?(r.scmid)}
+      offset += limit
     end
-    changeset
+
+    scm.get_filechanges_and_append_to(revisions)
+
+    transaction do
+      revisions.each do |rev|
+        # There is no search in the db for this revision, because above we ensured,
+        # that it's not in the db.
+        changeset = Changeset.create!(
+          repository:   self,
+          revision:     rev.identifier,
+          scmid:        rev.scmid,
+          committer:    rev.author,
+          committed_on: rev.time,
+          comments:     rev.message,
+        )
+        unless changeset.new_record?
+          rev.paths.each { |change| changeset.create_change(change) }
+        end
+      end
+      revisions.each do |rev|
+        changeset = changesets.find_by(revision: rev.identifier)
+        changeset.parents = (rev.parents || []).map{|rp| find_changeset_by_name(rp) }.compact
+        changeset.save!
+      end
+    end
   end
-  private :save_revision!
+  private :save_revisions!
 
   def find_changeset_by_name(name)
     if name.present?
@@ -161,6 +160,12 @@ class Repository::Github < Repository
     revisions = scm.revisions(path, nil, rev, :limit => limit, :all => false)
 
     return [] if revisions.nil? || revisions.empty?
+
+    if rev != default_branch
+      # Branch that is not default doesn't be synced automatically. so, save it here.
+      save_revisions!(revisions, revisions.dup)
+    end
+
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
