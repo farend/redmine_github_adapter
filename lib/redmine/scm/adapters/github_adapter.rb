@@ -10,20 +10,17 @@ module Redmine
         end
 
         PER_PAGE = 50
-        MAX_PAGES = 10
+        MAX_PAGES = 5
 
         def initialize(url, root_url=nil, login=nil, password=nil, path_encoding=nil)
           super
 
-          ## Get github project
-          @project = url.sub(root_url, '').sub(/^\//, '').sub(/\.git$/, '')
-          @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '')
+          @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '').gsub(/.git$/, '')
 
           ## Set Github endpoint and token
           Octokit.configure do |c|
             c.access_token = password
           end
-
         end
 
         def branches
@@ -48,22 +45,28 @@ module Redmine
           entries = Entries.new
 
           files = Octokit.contents(@repos, path: path, ref: identifier)
-          unless files.length == 0
+          files = Array.wrap(files)
+
+          if files.length > 0
             files.each do |file|
               full_path = file.path
+              next if entries.find{|entry| entry.name == full_path}
               entries << Entry.new({
                 :name => file.name.dup,
                 :path => file.path.dup,
                 :kind => file.type,
                 :size => (file.type == "dir") ? nil : file.size,
                 :lastrev => options[:report_last_commit] ? lastrev(full_path, identifier) : Revision.new
-              }) unless entries.detect{|entry| entry.name == file.path}
+              })
             end
           end
           entries.sort_by_name
 
         end
 
+        def rev_2_sha(rev)
+          Octokit.commits(@repos, rev, { per_page: 1 }).map(&:sha).first
+        end
 
         def lastrev(path, rev)
           return nil if path.nil?
@@ -72,7 +75,7 @@ module Redmine
             return Revision.new({
               :identifier => github_commit.sha,
               :scmid      => github_commit.sha,
-              :author     => github_commit.author.login,
+              :author     => github_commit.author&.login,
               :time       => github_commit.commit.committer.date,
               :message    => nil,
               :paths      => nil
@@ -92,15 +95,18 @@ module Redmine
           revs = Revisions.new
           per_page = PER_PAGE
           per_page = options[:limit].to_i if options[:limit]
-          all = false
-          all = options[:all] if options[:all]
 
-          if all
+          api_opts = { all: true, path: path, per_page: per_page }
+          api_opts[:since] = options[:last_committed_date] if options[:last_committed_date]
+
+          if options[:all]
             ## STEP 1: Seek start_page
             start_page = 1
             0.step do |i|
               start_page = i * MAX_PAGES + 1
-              github_commits = Octokit.commits(@repos, {all: true, path: path, page: start_page, per_page: per_page})
+              github_commits = Octokit.commits(@repos, api_opts.merge(page: start_page))
+              return [] if i == 0 && github_commits.none?{ |commit| commit.sha != options[:last_committed_id] }
+
               if github_commits.length < per_page
                 start_page = start_page - MAX_PAGES if i > 0
                 break
@@ -109,34 +115,16 @@ module Redmine
 
             ## Step 2: Get the commits from start_page
             start_page.step do |i|
-              github_commits = Octokit.commits(@repos, {all: true, path: path, page: i, per_page: per_page})
+              github_commits = Octokit.commits(@repos, api_opts.merge(page: i))
               break if github_commits.length == 0
               github_commits.each do |github_commit|
-                commit_diff = Octokit.commit(@repos, github_commit.sha)
-                files = commit_diff.files.map do |f|
-                  h = {}
-                  h[:action] = case f.status
-                  when "removed"
-                    "D"
-                  when "added"
-                    "A"
-                  when "modified"
-                    "M"
-                  else
-                    "M"
-                  end
-
-                  h[:path] = f.filename
-                  h[:from_path] = f[:from_revision] = nil
-                  h
-                end || []
                 revision = Revision.new({
                   :identifier => github_commit.sha,
                   :scmid      => github_commit.sha,
-                  :author     => github_commit.author.login,
+                  :author     => github_commit.author&.login,
                   :time       => github_commit.commit.committer.date,
                   :message    => github_commit.commit.message,
-                  :paths      => files,
+                  :paths      => nil, # Set paths later (In "get_filechanges_and_append_to" method.)
                   :parents    => github_commit.parents.map(&:sha)
                 })
                 revs << revision
@@ -148,7 +136,7 @@ module Redmine
               revision = Revision.new({
                 :identifier => github_commit.sha,
                 :scmid      => github_commit.sha,
-                :author     => github_commit.author.login,
+                :author     => github_commit.author&.login,
                 :time       => github_commit.commit.committer.date,
                 :message    => github_commit.commit.message,
                 :paths      => [],
@@ -158,10 +146,33 @@ module Redmine
             end
           end
 
-          revs.sort! do |a, b|
+          revs = revs.reverse.sort do |a, b|
             a.time <=> b.time
           end
-          revs
+        end
+
+        def get_filechanges_and_append_to(revisions)
+          revisions.each do |revision|
+            commit_diff = Octokit.commit(@repos, revision.identifier)
+            files = commit_diff.files.map do |f|
+              h = {}
+              h[:action] = case f.status
+              when "removed"
+                "D"
+              when "added"
+                "A"
+              when "modified"
+                "M"
+              else
+                "M"
+              end
+
+              h[:path] = f.filename
+              h[:from_path] = f[:from_revision] = nil
+              h
+            end
+            revision.paths = files
+          end
         end
 
         def diff(path, identifier_from, identifier_to=nil)
@@ -177,8 +188,8 @@ module Redmine
           end
 
           github_diffs.each do |github_diff|
-            if identifier_to.nil? && path.length > 0
-              next unless github_diff.map(&:sha).include? path
+            if path.length > 0
+              next if github_diff.filename != path && !github_diff.filename.include?("#{path}/")
             end
 
             case github_diff.status
@@ -234,13 +245,14 @@ module Redmine
             # Root entry
             Entry.new(:path => '', :kind => 'dir')
           else
-            content = Octokit.contents(@repos, path: path, sha: identifier)
+            es = entries(path, identifier, {report_last_commit: true })
+            content = es&.find {|e| e.name == path} || es&.first
 
             Entry.new({
-                :name => content.name,
-                :path => content.path,
-                :kind => content.type,
-                :size => (content.type == "dir") ? nil : content.size,
+                :name => content&.name,
+                :path => content&.path,
+                :kind => content&.path&.include?("#{path}/") ? 'dir' : content&.kind,
+                :size => (content&.kind == "dir") ? nil : content&.size,
               })
           end
         end
@@ -249,7 +261,7 @@ module Redmine
           identifier = 'HEAD' if identifier.nil?
 
         begin
-          blob = Octokit.contents(@repos, path: path, sha: identifier)
+          blob = Octokit.contents(@repos, path: path, ref: identifier)
           url = blob.download_url
         rescue Octokit::NotFound
           commit = Octokit.commit(@repos, identifier).files.select{|c| c.filename == path }.first

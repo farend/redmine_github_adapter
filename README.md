@@ -21,6 +21,12 @@ $ cd /path/to/redmine
 $ bunlde install
 ```
 
+plugin のマイグレーションを実行する。
+
+```sh
+$ bundle exec rake redmine:plugins:migrate
+```
+
 ## 使用方法
 
 ### 事前準備（APIトークンの発行）

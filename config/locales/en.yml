@@ -1,3 +1,5 @@
 # English strings go here for Rails i18n
 en:
-  # my_label: "My label"
+  text_github_repository_note: "Examples: https://<github.url>/<organization>/<repository>.git"
+  redmine_github_adapter:
+    label_api_token: 'API Token'
