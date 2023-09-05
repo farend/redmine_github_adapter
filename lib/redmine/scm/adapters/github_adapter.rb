@@ -9,8 +9,8 @@ module Redmine
           attr_accessor :is_default
         end
 
-        PER_PAGE = 50
-        MAX_PAGES = 5
+        PER_PAGE = 100
+        MAX_PAGES = 10
 
         def initialize(url, root_url=nil, login=nil, password=nil, path_encoding=nil)
           super
@@ -75,7 +75,7 @@ module Redmine
             return Revision.new({
               :identifier => github_commit.sha,
               :scmid      => github_commit.sha,
-              :author     => github_commit.author&.login,
+              :author     => github_commit.commit.author.name,
               :time       => github_commit.commit.committer.date,
               :message    => nil,
               :paths      => nil
@@ -121,7 +121,7 @@ module Redmine
                 revision = Revision.new({
                   :identifier => github_commit.sha,
                   :scmid      => github_commit.sha,
-                  :author     => github_commit.author&.login,
+                  :author     => github_commit.commit.author.name,
                   :time       => github_commit.commit.committer.date,
                   :message    => github_commit.commit.message,
                   :paths      => nil, # Set paths later (In "get_filechanges_and_append_to" method.)
@@ -136,7 +136,7 @@ module Redmine
               revision = Revision.new({
                 :identifier => github_commit.sha,
                 :scmid      => github_commit.sha,
-                :author     => github_commit.author&.login,
+                :author     => github_commit.commit.author.name,
                 :time       => github_commit.commit.committer.date,
                 :message    => github_commit.commit.message,
                 :paths      => [],
