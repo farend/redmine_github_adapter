@@ -18,7 +18,7 @@ git clone git@github.com:NaCl-Ltd/redmine_github_adapter.git plugins/redmine_git
 
 ```sh
 $ cd /path/to/redmine
-$ bunlde install
+$ bundle install
 ```
 
 plugin のマイグレーションを実行する。
