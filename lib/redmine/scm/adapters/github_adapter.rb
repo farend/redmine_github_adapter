@@ -36,6 +36,8 @@ module Redmine
             end
           end
           @branches.sort!
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def entries(path=nil, identifier=nil, options={})
@@ -59,10 +61,14 @@ module Redmine
             end
           end
           entries.sort_by_name
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def rev_2_sha(rev)
           Octokit.commits(@repos, rev, { per_page: 1 }).map(&:sha).first
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def lastrev(path, rev)
@@ -79,12 +85,16 @@ module Redmine
             })
           end
           return nil
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def get_path_name(path)
           Octokit.commits(@repos).map do |c|
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
           end.flatten.each_slice(2).to_h[path]
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
@@ -147,6 +157,8 @@ module Redmine
           revs = revs.reverse.sort do |a, b|
             a.time <=> b.time
           end
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def get_filechanges_and_append_to(revisions)
@@ -171,6 +183,8 @@ module Redmine
             end
             revision.paths = files
           end
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def diff(path, identifier_from, identifier_to=nil)
@@ -218,6 +232,8 @@ module Redmine
           end
           diff.flatten!
           diff.deep_dup
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def annotate(path, identifier=nil)
@@ -269,10 +285,18 @@ module Redmine
 
           content = blob.encoding == "base64" ? Base64.decode64(blob.content) : blob.content
           content.force_encoding 'utf-8'
+        rescue Octokit::Error => e
+          raise CommandFailed, handle_octokit_error(e)
         end
 
         def valid_name?(name)
           true
+        end
+
+        def handle_octokit_error(e)
+          logger.error "scm: github: error: #{e.message}"
+          gh_error = JSON.parse(e.response_body.to_s)['message'].presence
+          gh_error ? 'error response from GitHub: ' + gh_error : ''
         end
 
       end # end GitHubAdapter
