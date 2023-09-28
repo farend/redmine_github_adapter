@@ -18,7 +18,7 @@ class Repository::Github < Repository
   end
 
   def supports_annotate?
-    false
+    true
   end
 
   def repo_log_encoding

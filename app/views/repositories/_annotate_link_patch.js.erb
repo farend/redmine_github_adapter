@@ -1,0 +1,11 @@
+<% if @repository && @repository.class.name == "Repository::Github" && action_name == 'annotate' %>
+<style>
+p#errorExplanation { display: none }
+</style>
+<script>
+$(function(){
+  <% url = "#{@repository.url}/blame/#{@rev}/#{@path}" %>
+  $('p#errorExplanation').after('<a target="_blank" href="<%= url %>">View in GitHub</a>')
+})
+</script>
+<% end %>
