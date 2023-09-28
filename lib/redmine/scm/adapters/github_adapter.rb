@@ -36,6 +36,7 @@ module Redmine
             end
           end
           @branches.sort!
+
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
@@ -61,38 +62,42 @@ module Redmine
             end
           end
           entries.sort_by_name
+
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
 
-        def rev_2_sha(rev)
+        def revision_to_sha(rev)
           Octokit.commits(@repos, rev, { per_page: 1 }).map(&:sha).first
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
 
         def lastrev(path, rev)
-          return nil if path.nil?
+          return if path.nil?
+
           github_commits = Octokit.commits(@repos, rev, { path: path, per_page: 1 })
-          github_commits.each do |github_commit|
-            return Revision.new({
-              :identifier => github_commit.sha,
-              :scmid      => github_commit.sha,
-              :author     => github_commit.commit.author.name,
-              :time       => github_commit.commit.committer.date,
-              :message    => nil,
-              :paths      => nil
-            })
-          end
-          return nil
+          return if github_commits.blank?
+
+          github_commit = github_commits.first
+          return Revision.new({
+            :identifier => github_commit.sha,
+            :scmid      => github_commit.sha,
+            :author     => github_commit.commit.author.name,
+            :time       => github_commit.commit.committer.date,
+            :message    => nil,
+            :paths      => nil
+          })
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
 
         def get_path_name(path)
-          Octokit.commits(@repos).map do |c|
+
+          Octokit.commits(@repos).map {|c|
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
-          end.flatten.each_slice(2).to_h[path]
+          }.flatten.each_slice(2).to_h[path]
+
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
@@ -154,9 +159,8 @@ module Redmine
             end
           end
 
-          revs = revs.reverse.sort do |a, b|
-            a.time <=> b.time
-          end
+          revs.reverse.sort{ |a, b| a.time <=> b.time }
+
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
@@ -232,6 +236,7 @@ module Redmine
           end
           diff.flatten!
           diff.deep_dup
+
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
@@ -279,12 +284,13 @@ module Redmine
             blob = Octokit.blob(@repos, commit.sha)
             url = commit.raw_url
           end
-          Octokit.get url
+          Octokit.get(url)
           content_type = Octokit.last_response.headers['content-type'].slice(/charset=.+$/)&.gsub("charset=", "")
           return '' if content_type == "binary" || content_type.nil?
 
           content = blob.encoding == "base64" ? Base64.decode64(blob.content) : blob.content
           content.force_encoding 'utf-8'
+
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end

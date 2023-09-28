@@ -111,7 +111,7 @@ class Repository::Github < Repository
     is_using_cache = using_root_fileset_cache?(path, identifier)
 
     if is_using_cache
-      sha = scm.rev_2_sha(identifier)
+      sha = scm.revision_to_sha(identifier)
       changeset = find_changeset_by_name(sha)
     end
 
