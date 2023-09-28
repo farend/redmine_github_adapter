@@ -15,9 +15,8 @@ module Redmine
         def initialize(url, root_url=nil, login=nil, password=nil, path_encoding=nil)
           super
 
-          @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '').gsub(/.git$/, '')
-
           ## Set Github endpoint and token
+          @repos = url.gsub("https://github.com/", '').gsub(/\/$/, '').gsub(/.git$/, '')
           Octokit.configure do |c|
             c.access_token = password
           end
@@ -44,8 +43,7 @@ module Redmine
 
           entries = Entries.new
 
-          files = Octokit.contents(@repos, path: path, ref: identifier)
-          files = Array.wrap(files)
+          files = Array.wrap(Octokit.contents(@repos, path: path, ref: identifier))
 
           if files.length > 0
             files.each do |file|
@@ -61,7 +59,6 @@ module Redmine
             end
           end
           entries.sort_by_name
-
         end
 
         def rev_2_sha(rev)
@@ -93,8 +90,7 @@ module Redmine
         def revisions(path, identifier_from, identifier_to, options={})
           path ||= ''
           revs = Revisions.new
-          per_page = PER_PAGE
-          per_page = options[:limit].to_i if options[:limit]
+          per_page = options[:limit] ? options[:limit].to_i : PER_PAGE
 
           api_opts = { all: true, path: path, per_page: per_page }
           api_opts[:since] = options[:last_committed_date] if options[:last_committed_date]
@@ -105,13 +101,15 @@ module Redmine
             0.step do |i|
               start_page = i * MAX_PAGES + 1
               github_commits = Octokit.commits(@repos, api_opts.merge(page: start_page))
+
+              # if fetched latest commit, github_commits.length is 1, and github_commits[0][:sha] == latest_committed_id
               return [] if i == 0 && github_commits.none?{ |commit| commit.sha != options[:last_committed_id] }
 
-              if github_commits.length < per_page
-                start_page = start_page - MAX_PAGES if i > 0
-                break
-              end
+              break if github_commits.length < per_page
             end
+
+            # if found end of page, Go back MAX_PAGES from end of page.
+            start_page = start_page - MAX_PAGES if start_page > MAX_PAGES
 
             ## Step 2: Get the commits from start_page
             start_page.step do |i|
@@ -179,8 +177,6 @@ module Redmine
           path ||= ''
           diff = []
 
-          github_diffs = []
-
           if identifier_to.nil?
             github_diffs = Octokit.commit(@repos, identifier_from, path: path).files
           else
@@ -222,7 +218,6 @@ module Redmine
           end
           diff.flatten!
           diff.deep_dup
-
         end
 
         def annotate(path, identifier=nil)
@@ -249,25 +244,25 @@ module Redmine
             content = es&.find {|e| e.name == path} || es&.first
 
             Entry.new({
-                :name => content&.name,
-                :path => content&.path,
-                :kind => content&.path&.include?("#{path}/") ? 'dir' : content&.kind,
-                :size => (content&.kind == "dir") ? nil : content&.size,
-              })
+              :name => content&.name,
+              :path => content&.path,
+              :kind => content&.path&.include?("#{path}/") ? 'dir' : content&.kind,
+              :size => (content&.kind == "dir") ? nil : content&.size,
+            })
           end
         end
 
         def cat(path, identifier=nil)
           identifier = 'HEAD' if identifier.nil?
 
-        begin
-          blob = Octokit.contents(@repos, path: path, ref: identifier)
-          url = blob.download_url
-        rescue Octokit::NotFound
-          commit = Octokit.commit(@repos, identifier).files.select{|c| c.filename == path }.first
-          blob = Octokit.blob(@repos, commit.sha)
-          url = commit.raw_url
-        end
+          begin
+            blob = Octokit.contents(@repos, path: path, ref: identifier)
+            url = blob.download_url
+          rescue Octokit::NotFound
+            commit = Octokit.commit(@repos, identifier).files.select{|c| c.filename == path }.first
+            blob = Octokit.blob(@repos, commit.sha)
+            url = commit.raw_url
+          end
           Octokit.get url
           content_type = Octokit.last_response.headers['content-type'].slice(/charset=.+$/)&.gsub("charset=", "")
           return '' if content_type == "binary" || content_type.nil?
@@ -280,8 +275,7 @@ module Redmine
           true
         end
 
-      end
-
-    end
-  end
-end
+      end # end GitHubAdapter
+    end # end Adapters
+  end # end Scm
+end # end Redmine
