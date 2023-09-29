@@ -1,0 +1,6 @@
+# English strings go here for Rails i18n
+en:
+  text_github_repository_note: "例 https://<github.url>/<organization>/<repository>.git"
+  redmine_github_adapter:
+    label_api_token: 'API Token'
+    label_sync_button: 'リポジトリを同期'

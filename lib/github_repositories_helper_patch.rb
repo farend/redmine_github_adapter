@@ -31,7 +31,41 @@ module GithubRepositoriesHelperPatch
           label: l(:label_git_report_last_commit)
         )
       )
+      if repository&.persisted?
+        field_tags << content_tag(
+          'p',
+          button_tag(data: { fetchfrom: 'github' }) { l('redmine_github_adapter.label_sync_button') }
+        )
+        field_tags << content_tag(
+          'script', github_fetch_js(repository).html_safe
+        )
+      end
       field_tags.join.html_safe
+    end
+
+    def github_fetch_js(repository)
+      <<EOS
+$(function(){
+  function fetchFromGithub() {
+    return $.ajax("/repositories/#{repository.id}/fetch_from_github")
+    .then(function(data, textStatus, jqXHR){
+      if (data.status == 'OK') return;
+      if (data.status == 'Processing') return fetchFromGithub();
+      throw "Unexpected Status: " + JSON.stringify(data);
+    });
+  }
+
+  $('button[data-fetchfrom=github]').on('click', function(e){
+    e.preventDefault()
+    $(this).prop('disabled', true);
+    fetchFromGithub()
+    .then(() => {
+      $(this).prop('disabled', false);
+    })
+    return false;
+  });
+});
+EOS
     end
   end
 end

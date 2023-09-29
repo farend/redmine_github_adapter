@@ -34,31 +34,23 @@ class Repository::Github < Repository
     scm.branches
   end
 
-  def fetch_changesets
-    opts = {
+  def fetch_changesets(options = {})
+    opts = options.merge({
       last_committed_date: extra_info&.send(:[], "last_committed_date"),
       last_committed_id: extra_info&.send(:[], "last_committed_id"),
       all: true
-    }
+    })
 
     revisions = scm.revisions('', nil, nil, opts)
     revisions_copy = revisions.clone # revisions will change
 
     save_revisions!(revisions, revisions_copy)
 
-    h = {}
+    merge_extra_info({
+      last_committed_date: (revisions.last || revisions_copy.last)&.time&.utc&.strftime("%FT%TZ"),
+      last_committed_id: (revisions.last || revisions_copy.last)&.scmid
+    }.compact.stringify_keys)
 
-    if revisions_copy.size > 0
-      h["last_committed_date"] = revisions_copy.last.time.utc.strftime("%FT%TZ")
-      h["last_committed_id"] = revisions_copy.last.scmid
-    end
-
-    if revisions.size > 0
-      h["last_committed_date"] = revisions.last.time.utc.strftime("%FT%TZ")
-      h["last_committed_id"] = revisions.last.scmid
-    end
-
-    merge_extra_info(h)
     save(validate: false)
   end
 

@@ -3,3 +3,4 @@ en:
   text_github_repository_note: "Examples: https://<github.url>/<organization>/<repository>.git"
   redmine_github_adapter:
     label_api_token: 'API Token'
+    label_sync_button: 'Sync with GitHub'
