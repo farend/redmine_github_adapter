@@ -27,6 +27,12 @@ plugin のマイグレーションを実行する。
 $ bundle exec rake redmine:plugins:migrate
 ```
 
+自動テストの実行
+
+```
+$ bundle exec rake redmine:plugins:test RAILS_ENV=test
+```
+
 ## 使用方法
 
 ### 事前準備（APIトークンの発行）
