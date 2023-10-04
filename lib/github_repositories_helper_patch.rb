@@ -34,7 +34,7 @@ module GithubRepositoriesHelperPatch
       if repository&.persisted?
         field_tags << content_tag(
           'p',
-          button_tag(data: { fetchfrom: 'github' }) { l('redmine_github_adapter.label_sync_button') }
+          button_tag(type: 'button', data: { fetchfrom: 'github' }) { l('redmine_github_adapter.label_sync_button') }
         )
         field_tags << content_tag(
           'script', github_fetch_js(repository).html_safe
@@ -47,7 +47,7 @@ module GithubRepositoriesHelperPatch
       <<EOS
 $(function(){
   function fetchFromGithub() {
-    return $.ajax("/repositories/#{repository.id}/fetch_from_github")
+    return $.ajax("#{url_for(controller: 'github_repositories', action: 'fetch', id: repository.id)}")
     .then(function(data, textStatus, jqXHR){
       if (data.status == 'OK') return;
       if (data.status == 'Processing') return fetchFromGithub();
