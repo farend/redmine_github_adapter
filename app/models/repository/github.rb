@@ -44,6 +44,8 @@ class Repository::Github < Repository
     revisions = scm.revisions('', nil, nil, opts)
     revisions_copy = revisions.clone # revisions will change
 
+    return if revisions.blank?
+
     save_revisions!(revisions, revisions_copy)
 
     merge_extra_info({
@@ -64,6 +66,8 @@ class Repository::Github < Repository
       revisions.reject!{|r| recent_revisions.include?(r.scmid)}
       offset += limit
     end
+
+    return if revisions.blank?
 
     scm.get_filechanges_and_append_to(revisions)
 
