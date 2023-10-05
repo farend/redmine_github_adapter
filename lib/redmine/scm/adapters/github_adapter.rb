@@ -216,7 +216,7 @@ module Redmine
               diff << "--- /dev/null"
               diff << "+++ b/#{github_diff.filename}"
               diff << "@@ -0,0 +1,2 @@"
-              cat(github_diff.filename, identifier_to).split("\n").each do |line|
+              cat(github_diff.filename, identifier_from).split("\n").each do |line|
                 diff << "+#{line}"
               end
             when "removed"
@@ -224,7 +224,7 @@ module Redmine
               diff << "--- a/#{github_diff.filename}"
               diff << "+++ /dev/null"
               diff << "@@ -1,2 +0,0 @@"
-              cat(github_diff.filename, identifier_from).split("\n").each do |line|
+              cat(github_diff.filename, identifier_to).split("\n").each do |line|
                 diff << "-#{line}"
               end
             else
