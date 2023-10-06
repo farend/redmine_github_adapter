@@ -159,7 +159,7 @@ class Repository::Github < Repository
 
     if rev != default_branch
       # Branch that is not default doesn't be synced automatically. so, save it here.
-      save_revisions!(revisions, revisions.dup)
+      save_revisions!(revisions.dup, revisions.dup)
     end
 
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
