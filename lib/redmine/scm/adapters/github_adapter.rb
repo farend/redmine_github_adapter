@@ -74,7 +74,6 @@ module Redmine
 
         def revision_to_sha(rev)
           # 引数に与えられたリビジョン番号に対応するshaを返す
-          # 存在しないリビジョン番号を指定した場合例外を返す
           Octokit.commits(@repos, rev, { per_page: 1 }).map(&:sha).first
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
@@ -82,7 +81,7 @@ module Redmine
 
         def lastrev(path, rev)
           # 引数に与えられたファイルパス・リビジョン番号に該当する最新のコミットをRevisionオブジェクトとして返す
-          # 該当するコミットが存在しない場合例外を返す
+          # 引数pathが与えられなかった場合、もしくは該当するコミットが存在しない場合nilを返す
           return if path.nil?
 
           github_commits = Octokit.commits(@repos, rev, { path: path, per_page: 1 })
@@ -102,12 +101,11 @@ module Redmine
         end
 
         def get_path_name(path)
-          # 引数で与えられたファイルパスに対応するコミットのSHAを返す
-          # 該当するものが存在しない場合例外を返す
+          # 引数で与えられたSHA対応するコミットのパス名を返す
+
           Octokit.commits(@repos).map {|c|
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
           }.flatten.each_slice(2).to_h[path]
-
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end

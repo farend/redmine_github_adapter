@@ -85,7 +85,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
   end
 
   def test_entries_Githubの戻り値が1つある場合
-    content = OctokitContent.new('test.md', 'farend/redmine_github_repo', 'file', 256)
+    content = OctokitContent.new(name: 'test.md', path: 'farend/redmine_github_repo', type: 'file', size: 256)
     
     Octokit.stub(:contents, build_mock([content], []) { |repos, path, ref|
       assert_equal @repo, repos
@@ -101,7 +101,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
 
   def test_entries_Githubの戻り値が複数ある場合
     contents = ['test.md', 'test.txt'].sort.map{ |name|
-      OctokitContent.new(name, 'farend/redmine_github_repo', 'file', 256)
+      OctokitContent.new(name: name, path: 'farend/redmine_github_repo', type: 'file', size: 256)
     }
     
     Octokit.stub(:contents, build_mock(contents, []) { |repos, path, ref|
@@ -118,7 +118,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
 
   def test_entries_Githubに未ソートのコンテンツが与えられた場合
     contents = ['bbb.md', 'ccc.md', 'aaa.md'].map{ |name|
-      OctokitContent.new(name, 'farend/redmine_github_repo', 'file', 256)
+      OctokitContent.new(name: name, path: 'farend/redmine_github_repo', type: 'file', size: 256)
     }
     
     Octokit.stub(:contents, build_mock(contents, []) { |repos, path, ref|
@@ -132,7 +132,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
   end
 
   def test_entries_Githubで与えられたファイルパスがエントリ名として既に存在する場合
-    contents = 3.times.map{ |i| OctokitContent.new('README.md', 'README.md', 'file', 256*i)}
+    contents = 3.times.map{ |i| OctokitContent.new(name: 'README.md', path: 'README.md', type: 'file', size: 256*i)}
     
     Octokit.stub(:contents, build_mock(contents, []) { |repos, path, ref|
       assert_equal @repo, repos
@@ -144,10 +144,8 @@ class GithubAdapterTest < ActiveSupport::TestCase
   end
 
   def test_entries_Githubでオプションreport_last_commitがtrueの場合
-    # TODO: commitのモックをテスト内で使用可能にする
-    content = OctokitContent.new('test.md', 'farend/redmine_github_repo', 'file', 256)
+    content = OctokitContent.new(name: 'test.md', path: 'farend/redmine_github_repo', type: 'file', size: 256)
     lastrev = OctokitRevision.new(identifier: 'shashasha')
-    # = [OctokitCommit.new(sha: 'shashasha')]
     
     Octokit.stub(:contents, build_mock(content, []) { |repos, path, ref|
       assert_equal @repo, repos
@@ -160,13 +158,77 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
+  def test_revision_to_sha_Githubの戻り値が存在する場合
+    commit = OctokitCommit.new(sha: 'shashasha')
+    opt = { per_page: 1 }
+    
+    Octokit.stub(:commits, build_mock([commit], []) { |repos, rev, opt|
+      assert_equal @repo, repos
+    }) do
+      assert_equal 'shashasha', @scm.revision_to_sha('shashasha')
+    end
+  end
+
+  def test_lastrev_Githubの戻り値が返ってくる場合
+    author = OctokitAuthor.new(name: 'AuthorName')
+    committer = OctokitCommiter.new(date: '2023-01-01 00:00:00')
+    rev = OctokitRevision.new(identifier: 'shashasha', author: author, committer: committer)
+    commit = OctokitCommit.new(sha: 'shashasha', commit: rev )
+    opt = { per_page: 1 }
+    
+    Octokit.stub(:commits, build_mock([commit], []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      revision = @scm.lastrev('farend/redmine_github_repo', 'shashasha')
+      
+      assert_equal 'shashasha', revision.identifier
+      assert_equal 'AuthorName', revision.author
+      assert_equal '2023-01-01 00:00:00', revision.time
+    end
+  end
+
+  def test_lastrev_Githubの引数pathが与えられない場合
+    Octokit.stub(:commits, build_mock([], []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      assert_equal nil, @scm.lastrev(nil, 'shashasha')
+    end
+  end
+
+  def test_lastrev_Githubの引数に該当するコミットが存在しない場合
+    Octokit.stub(:commits, build_mock([], []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      assert_equal nil, @scm.lastrev('farend/redmine_github_repo', 'shashasha')
+    end
+  end
+
+  def test_get_path_name_Githubの戻り値が存在する場合
+    blob = OctokitContent.new(sha: 'shashasha', path: 'farend/redmine_github_repo')
+    tree = OctokitTree.new(tree:[blob], sha: 'shashasha')
+    commit = OctokitCommit.new(sha: 'shashasha', commit: OctokitRevision.new(tree: tree))
+    
+    Octokit.stub(:commits, build_mock([commit], []) { |repos, rev, opt|
+      assert_equal @repo, repos
+    }) do
+      Octokit.stub(:tree, build_mock(tree, []) { |repos, sha|
+        assert_equal @repo, repos
+        assert_equal 'shashasha', sha
+      }) do
+        assert_equal 'farend/redmine_github_repo', @scm.get_path_name('shashasha')
+      end
+    end
+  end
 
   ## 以下、Octokitのモックに使う部品たち ##
 
   OctokitBranch = Struct.new(:name, :commit, keyword_init: true)
-  OctokitCommit = Struct.new(:sha, keyword_init: true)
-  OctokitContent = Struct.new(:name, :path, :type, :size)
-  OctokitRevision = Struct.new(:identifier, :paths)
+  OctokitCommit = Struct.new(:sha, :commit, keyword_init: true)
+  OctokitContent = Struct.new(:sha, :name, :path, :type, :size, :download_url, keyword_init: true)
+  OctokitRevision = Struct.new(:identifier, :author, :committer, :tree, keyword_init: true)
+  OctokitAuthor = Struct.new(:name, keyword_init: true)
+  OctokitCommiter = Struct.new(:date, keyword_init: true)
+  OctokitTree = Struct.new(:tree, :sha, keyword_init: true)
 
   def build_mock(*returns, &proc)
     mock = Minitest::Mock.new
