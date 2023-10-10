@@ -23,6 +23,8 @@ module Redmine
         end
 
         def branches
+          # レシーバに紐づくGithubBranchオブジェクトを配列にして返す
+          # 対象となるGithubBranchオブジェクトが存在しない場合、空の配列を返す
           return @branches if @branches
           @branches = []
           1.step do |i|
@@ -42,6 +44,9 @@ module Redmine
         end
 
         def entries(path=nil, identifier=nil, options={})
+          # identifier該当するコミットの、path以下に含まれる各ファイルのエントリを配列にして返す
+          # 対象となるファイルが存在しない場合、空の配列を返す
+          # report_last_commitオプションにtrueが与えられた場合、エントリにファイルの最新更新リビジョンを含める
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
@@ -68,12 +73,16 @@ module Redmine
         end
 
         def revision_to_sha(rev)
+          # 引数に与えられたリビジョン番号に対応するshaを返す
+          # 存在しないリビジョン番号を指定した場合例外を返す
           Octokit.commits(@repos, rev, { per_page: 1 }).map(&:sha).first
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
 
         def lastrev(path, rev)
+          # 引数に与えられたファイルパス・リビジョン番号に該当する最新のコミットをRevisionオブジェクトとして返す
+          # 該当するコミットが存在しない場合例外を返す
           return if path.nil?
 
           github_commits = Octokit.commits(@repos, rev, { path: path, per_page: 1 })
@@ -93,7 +102,8 @@ module Redmine
         end
 
         def get_path_name(path)
-
+          # 引数で与えられたファイルパスに対応するコミットのSHAを返す
+          # 該当するものが存在しない場合例外を返す
           Octokit.commits(@repos).map {|c|
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
           }.flatten.each_slice(2).to_h[path]
@@ -103,6 +113,8 @@ module Redmine
         end
 
         def revisions(path, identifier_from, identifier_to, options={})
+          # 引数で与えられた条件に合致するコミットをrevisionオブジェクトの配列として返す
+          # 配列はコミット日時の降順でソートされる
           path ||= ''
           revs = Revisions.new
           per_page = options[:limit] ? options[:limit].to_i : PER_PAGE
@@ -166,6 +178,8 @@ module Redmine
         end
 
         def get_filechanges_and_append_to(revisions)
+          # リビジョン番号の配列を引数に受け取る
+          # 該当するコミットの変更・追加箇所の情報を各revisionオブジェクトに追記する
           revisions.each do |revision|
             commit_diff = Octokit.commit(@repos, revision.identifier)
             files = commit_diff.files.map do |f|
@@ -192,6 +206,8 @@ module Redmine
         end
 
         def diff(path, identifier_from, identifier_to=nil)
+          # pathで指定されたファイルに関して、コミット間のファイル内容の差分箇所を特定する
+          # また差分範囲を整形し標準出力に引き渡す
           path ||= ''
           diff = []
 
@@ -246,6 +262,7 @@ module Redmine
         end
 
         def default_branch
+          # デフォルトブランチを返す
           return if branches.blank?
 
           (
@@ -256,6 +273,8 @@ module Redmine
         end
 
         def entry(path=nil, identifier=nil)
+          # identifier該当するコミットの、pathに該当するエントリを返す
+          # pathが空の場合、トップレベルのエントリを返す
           identifier ||= 'HEAD'
           if path.blank?
             # Root entry
@@ -274,11 +293,14 @@ module Redmine
         end
 
         def cat(path, identifier=nil)
+          # pathで受け取ったファイルをutf-8にエンコードし標準出力する
+          # 取得したコンテンツタイプがバイナリ形式もしくはnilだった場合、空文字を返す
           identifier = 'HEAD' if identifier.nil?
 
           begin
             blob = Octokit.contents(@repos, path: path, ref: identifier)
             url = blob.download_url
+
           rescue Octokit::NotFound
             commit = Octokit.commit(@repos, identifier).files.select{|c| c.filename == path }.first
             blob = Octokit.blob(@repos, commit.sha)
@@ -287,7 +309,6 @@ module Redmine
           Octokit.get(url)
           content_type = Octokit.last_response.headers['content-type'].slice(/charset=.+$/)&.gsub("charset=", "")
           return '' if content_type == "binary" || content_type.nil?
-
           content = blob.encoding == "base64" ? Base64.decode64(blob.content) : blob.content
           content.force_encoding 'utf-8'
 
