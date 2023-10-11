@@ -22,9 +22,9 @@ module Redmine
           end
         end
 
+        # レシーバに紐づくGithubBranchオブジェクトを配列にし、ブランチ名でソートして返す
+        # 対象となるGithubBranchオブジェクトが存在しない場合、空の配列を返す
         def branches
-          # レシーバに紐づくGithubBranchオブジェクトを配列にして返す
-          # 対象となるGithubBranchオブジェクトが存在しない場合、空の配列を返す
           return @branches if @branches
           @branches = []
           1.step do |i|
@@ -43,10 +43,12 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
+        # pathにファイル・ディレクトリのパス, identifierにコミットのSHAを受け取る
+        # identifierに該当するコミットの、path以下に含まれる各ファイルのエントリを配列にして返す
+        # pathが空の場合rootディレクトリを、identifierが空の場合HEADコミットを対象とする
+        # 対象となるファイルが存在しない場合、空の配列を返す
+        # report_last_commitオプションにtrueが与えられた場合、各エントリにファイルの最新コミット情報を含める
         def entries(path=nil, identifier=nil, options={})
-          # identifier該当するコミットの、path以下に含まれる各ファイルのエントリを配列にして返す
-          # 対象となるファイルが存在しない場合、空の配列を返す
-          # report_last_commitオプションにtrueが与えられた場合、エントリにファイルの最新更新リビジョンを含める
           identifier = 'HEAD' if identifier.nil?
 
           entries = Entries.new
@@ -72,16 +74,18 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
+        # revにコミットのSHAもしくはブランチ名を受け取る
+        # 引数に該当するコミットをすべて取得し、その中で最新コミットのSHAを返す
         def revision_to_sha(rev)
-          # 引数に与えられたリビジョン番号に対応するshaを返す
           Octokit.commits(@repos, rev, { per_page: 1 }).map(&:sha).first
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
 
+        # pathにファイル・ディレクトリのパス、revにコミットのSHAもしくはブランチ名を受け取る 
+        # revに該当するコミット以前でpath以下に変更があった最新のコミットを取得し、Revisionオブジェクトとして返す
+        # 引数pathが与えられなかった場合、もしくは該当するコミットが存在しない場合nilを返す
         def lastrev(path, rev)
-          # 引数に与えられたファイルパス・リビジョン番号に該当する最新のコミットをRevisionオブジェクトとして返す
-          # 引数pathが与えられなかった場合、もしくは該当するコミットが存在しない場合nilを返す
           return if path.nil?
 
           github_commits = Octokit.commits(@repos, rev, { path: path, per_page: 1 })
@@ -100,19 +104,21 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
+        # pathにtreeオブジェクトのshaを受け取る
+        # treeの最上位に位置するファイル・ディレクトリ名を返す
         def get_path_name(path)
-          # 引数で与えられたSHA対応するコミットのパス名を返す
-
           Octokit.commits(@repos).map {|c|
             Octokit.tree(@repos, c.commit.tree.sha).tree.map{|b| [b.sha, b.path] }
           }.flatten.each_slice(2).to_h[path]
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
-
+        
+        # pathにファイル・ディレクトリのパス, identifier_from/identifier_toにコミットのSHAを受け取る
+        # allオプションがtrueの場合、
+        # 引数で与えられた条件に合致するコミットをRevisionオブジェクトの配列として返す
+        # 配列はコミット日時の降順でソートされる
         def revisions(path, identifier_from, identifier_to, options={})
-          # 引数で与えられた条件に合致するコミットをrevisionオブジェクトの配列として返す
-          # 配列はコミット日時の降順でソートされる
           path ||= ''
           revs = Revisions.new
           per_page = options[:limit] ? options[:limit].to_i : PER_PAGE
@@ -175,9 +181,9 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
+        # 複数のrevisionオブジェクトをを配列として受け取り、該当コミットの変更状況をhashにする
+        # 作成したhashを各revisionオブジェクトのpathsパラメータに追記する
         def get_filechanges_and_append_to(revisions)
-          # リビジョン番号の配列を引数に受け取る
-          # 該当するコミットの変更・追加箇所の情報を各revisionオブジェクトに追記する
           revisions.each do |revision|
             commit_diff = Octokit.commit(@repos, revision.identifier)
             files = commit_diff.files.map do |f|
@@ -203,9 +209,10 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
+        # pathにファイルのパス, identifier_from/identifier_toにコミットのSHAを受け取る
+        # pathで指定されたファイル内容について、identifier~で指定されたコミット間の差分箇所を特定する
+        # 特定した差分箇所に追記を行い、文字列の配列として返す
         def diff(path, identifier_from, identifier_to=nil)
-          # pathで指定されたファイルに関して、コミット間のファイル内容の差分箇所を特定する
-          # また差分範囲を整形し標準出力に引き渡す
           path ||= ''
           diff = []
 
@@ -259,8 +266,8 @@ module Redmine
           nil
         end
 
+        # デフォルトブランチ名を文字列にして返す
         def default_branch
-          # デフォルトブランチを返す
           return if branches.blank?
 
           (
@@ -270,9 +277,11 @@ module Redmine
           ).to_s
         end
 
+        # pathにファイル・ディレクトリのパス, identifierにコミットのSHAを受け取る
+        # identifierに該当するコミットの、pathに指定されたファイル・ディレクトリのエントリを返す
+        # identifierが空の場合、HEADコミットを対象にする
+        # pathが空の場合、トップレベルのエントリを返す
         def entry(path=nil, identifier=nil)
-          # identifier該当するコミットの、pathに該当するエントリを返す
-          # pathが空の場合、トップレベルのエントリを返す
           identifier ||= 'HEAD'
           if path.blank?
             # Root entry
@@ -290,9 +299,9 @@ module Redmine
           end
         end
 
+        # identifierにSHAが該当するコミットの、pathに指定されたファイルの内容を文字列で返す
+        # identifierが空の場合、HEADコミットを対象にする
         def cat(path, identifier=nil)
-          # pathで受け取ったファイルをutf-8にエンコードし標準出力する
-          # 取得したコンテンツタイプがバイナリ形式もしくはnilだった場合、空文字を返す
           identifier = 'HEAD' if identifier.nil?
 
           begin

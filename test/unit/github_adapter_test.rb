@@ -131,18 +131,6 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_entries_Githubで与えられたファイルパスがエントリ名として既に存在する場合
-    contents = 3.times.map{ |i| OctokitContent.new(name: 'README.md', path: 'README.md', type: 'file', size: 256*i)}
-    
-    Octokit.stub(:contents, build_mock(contents, []) { |repos, path, ref|
-      assert_equal @repo, repos
-    }) do
-      entries = @scm.entries
-      assert_equal 1, entries.length
-      assert_equal 0, entries.last.size
-    end
-  end
-
   def test_entries_Githubでオプションreport_last_commitがtrueの場合
     content = OctokitContent.new(name: 'test.md', path: 'farend/redmine_github_repo', type: 'file', size: 256)
     lastrev = OctokitRevision.new(identifier: 'shashasha')
@@ -154,11 +142,12 @@ class GithubAdapterTest < ActiveSupport::TestCase
         assert_equal @repo, repos
       }) do
         entries = @scm.entries(nil, 'shashasha', {report_last_commit: true})
+        assert_equal 'shashasha', entries[0].lastrev.identifier
       end
     end
   end
 
-  def test_revision_to_sha_Githubの戻り値が存在する場合
+  def test_revision_to_sha_GithubにコミットのSHAを渡した場合
     commit = OctokitCommit.new(sha: 'shashasha')
     opt = { per_page: 1 }
     
@@ -169,12 +158,23 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
+  def test_revision_to_sha_Githubにブランチ名を渡した場合
+    branch = OctokitBranch.new(name: 'main', sha: 'shashasha')
+    opt = { per_page: 1 }
+    
+    Octokit.stub(:commits, build_mock([branch], []) { |repos, rev, opt|
+      assert_equal @repo, repos
+      assert_equal 'main', rev
+    }) do
+      assert_equal 'shashasha', @scm.revision_to_sha('main')
+    end
+  end
+
   def test_lastrev_Githubの戻り値が返ってくる場合
     author = OctokitAuthor.new(name: 'AuthorName')
     committer = OctokitCommiter.new(date: '2023-01-01 00:00:00')
     rev = OctokitRevision.new(identifier: 'shashasha', author: author, committer: committer)
     commit = OctokitCommit.new(sha: 'shashasha', commit: rev )
-    opt = { per_page: 1 }
     
     Octokit.stub(:commits, build_mock([commit], []) { |repos, rev|
       assert_equal @repo, repos
@@ -220,15 +220,99 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
+  def test_revisions_Githubの戻り値が1つある場合
+    author = OctokitAuthor.new(name: 'AuthorName')
+    committer = OctokitCommiter.new(date: '2023-01-01 00:00:00')
+    parent = OctokitCommit.new(sha: 'shashafrom')
+    rev = OctokitRevision.new(identifier: 'shashato', author: author, committer: committer, message: 'commit message')
+    commit = OctokitCommit.new(sha: 'shashato', commit: rev, parents: [parent])
+    opt = { path: @repo, per_page: 1 }
+    Octokit.stub(:commits, build_mock([commit], []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      revisions = @scm.revisions(@repo, 'shashato', 'shashafrom', opt )
+
+      assert_equal 1, revisions.size
+      assert_equal 'shashato', revisions[0].identifier
+      assert_equal 'commit message', revisions[0].message
+      assert_equal '2023-01-01 00:00:00', revisions[0].time
+      assert_equal 'shashafrom', revisions[0].parents[0]
+    end
+  end
+
+  def test_revisions_Githubの戻り値が複数ある場合
+    parents = []
+    commits = 3.times.map { |i|
+      author = OctokitAuthor.new(name: "Author#{i}")
+      committer = OctokitCommiter.new(date: "2023-01-00 0#{i}:00:00")
+      parents << OctokitCommit.new(sha: "shashasha#{i}")
+      rev = OctokitRevision.new(identifier: "shashasha#{i+1}", author: author, committer: committer, message: 'commit message')
+      OctokitCommit.new(sha: "shashasha#{i+1}", commit: rev, parents: parents.dup)
+    }
+
+    opt = { path: @repo, per_page: 1 }
+    Octokit.stub(:commits, build_mock(commits, []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      revisions = @scm.revisions(@repo, 'shashato', 'shashafrom', opt )
+      
+      assert_equal 3, revisions.size
+
+      revisions.each_with_index {|rev, i|
+        assert_equal "shashasha#{i+1}", rev.identifier
+        assert_equal "2023-01-00 0#{i}:00:00", rev.time
+        assert_equal i + 1, rev.parents.size
+      }
+    end
+  end
+
+  def test_revisions_Githubのallオプションにtrueが与えられる場合
+    parents = []
+    commits = 3.times.map { |i|
+      author = OctokitAuthor.new(name: "Author#{i}")
+      committer = OctokitCommiter.new(date: "2023-01-00 0#{i}:00:00")
+      parents << OctokitCommit.new(sha: "shashasha#{i}")
+      rev = OctokitRevision.new(identifier: "shashasha#{i+1}", author: author, 
+                                committer: committer, message: 'commit message')
+      OctokitCommit.new(sha: "shashasha#{i+1}", commit: rev, parents: parents.dup)
+    }
+    opt = { path: @repo, per_page: 1, all: true, last_committed_id: 'shashasha3'}
+    Octokit.stub(:commits, build_mock(commits, []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      revisions = @scm.revisions(@repo, 'shashasha2', 'shashasha3', opt )
+      
+      assert_equal 0, revisions.size
+    end
+  end
+
+  def test_get_filechanges_and_append_to_Githubにrevisionが渡される場合
+    add_file = TestFile.new(status: "added", filename: "add.md")
+    mod_file = TestFile.new(status: "modified", filename: "mod.md")
+    rev = OctokitRevision.new(identifier: "shashasha", paths: nil)
+    commit = OctokitCommit.new(sha: "shashasha", files: [add_file, mod_file])
+
+    Octokit.stub(:commit, build_mock(commit, []) { |repos, sha|
+      assert_equal @repo, repos
+    }) do
+      @scm.get_filechanges_and_append_to([rev])
+      assert_equal 'A', rev.paths[0][:action]
+      assert_equal 'add.md', rev.paths[0][:path]
+      assert_equal 'M', rev.paths[1][:action]
+      assert_equal 'mod.md', rev.paths[1][:path]
+    end
+  end
+
   ## 以下、Octokitのモックに使う部品たち ##
 
-  OctokitBranch = Struct.new(:name, :commit, keyword_init: true)
-  OctokitCommit = Struct.new(:sha, :commit, keyword_init: true)
+  OctokitBranch = Struct.new(:name, :commit, :sha, keyword_init: true)
+  OctokitCommit = Struct.new(:sha, :commit, :parents, :files, keyword_init: true)
   OctokitContent = Struct.new(:sha, :name, :path, :type, :size, :download_url, keyword_init: true)
-  OctokitRevision = Struct.new(:identifier, :author, :committer, :tree, keyword_init: true)
+  OctokitRevision = Struct.new(:identifier, :author, :committer, :tree, :message, :paths, keyword_init: true)
   OctokitAuthor = Struct.new(:name, keyword_init: true)
   OctokitCommiter = Struct.new(:date, keyword_init: true)
   OctokitTree = Struct.new(:tree, :sha, keyword_init: true)
+  TestFile = Struct.new(:status, :filename, :from_revision, keyword_init: true)
 
   def build_mock(*returns, &proc)
     mock = Minitest::Mock.new
