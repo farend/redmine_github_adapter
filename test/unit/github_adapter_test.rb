@@ -131,7 +131,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_entries_Githubでオプションreport_last_commitがtrueの場合
+  def test_entries_Githubのreport_last_commitオプションにtrueが与えられる場合
     content = OctokitContent.new(name: 'test.md', path: 'farend/redmine_github_repo', type: 'file', size: 256)
     lastrev = OctokitRevision.new(identifier: 'shashasha')
     
@@ -147,7 +147,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_revision_to_sha_GithubにコミットのSHAを渡した場合
+  def test_revision_to_sha_GithubにコミットのSHAを渡される場合
     commit = OctokitCommit.new(sha: 'shashasha')
     opt = { per_page: 1 }
     
@@ -158,7 +158,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_revision_to_sha_Githubにブランチ名を渡した場合
+  def test_revision_to_sha_Githubにブランチ名を渡される場合
     branch = OctokitBranch.new(name: 'main', sha: 'shashasha')
     opt = { per_page: 1 }
     
@@ -303,16 +303,235 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
+  def test_diff_Githubに追加差分のあるファイルパスとコミットSHAが渡される場合
+    file = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
+    cat = "add_line"
+    commit = OctokitCommit.new(sha: 'shashasha', files: [file])
+
+    added_diffs = [
+      "diff",
+      "--- /dev/null",
+      "+++ b/#{file.filename}",
+      "@@ -0,0 +1,2 @@",
+      "+#{cat}"
+    ]
+
+    Octokit.stub(:commit, build_mock(commit, []) { |repos, sha|
+      assert_equal @repo, repos
+    }) do
+      @scm.stub(:cat, build_mock(cat, []) { |path, identifier|
+        assert_equal 'farend/redmine_github_repo/README.md', path
+      }) do
+            diffs = @scm.diff(@repo, "shashasha")
+            assert_equal added_diffs, diffs
+      end
+    end
+  end
+
+  def test_diff_Githubにファイル名変更差分のあるファイルパスとコミットSHAが渡される場合
+    file_from = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
+    file_to = TestFile.new(status: 'renamed', filename: "farend/redmine_github_repo/RENAME.md", previous_filename: "farend/redmine_github_repo/README.md")
+    cat = "add_line"
+    commit_from = OctokitCommit.new(sha: 'shashafrom')
+    commit_to = OctokitCommit.new(sha: 'shashato')
+    compare = OctokitCompare.new(base_commit: commit_from, commits: [commit_to], files: [file_to, file_from])
+
+    renamed_diffs = [
+      "diff",
+      "--- a/#{file_from.filename}",
+      "+++ b/#{file_to.filename}",
+      "diff",
+      "--- /dev/null",
+      "+++ b/#{file_from.filename}",
+      "@@ -0,0 +1,2 @@",
+      "+#{cat}"
+    ]
+
+    Octokit.stub(:compare, build_mock(compare, []) { |repos, sha|
+      assert_equal @repo, repos
+    }) do
+      @scm.stub(:cat, build_mock(cat, []) { |path, identifier|
+        assert_equal 'farend/redmine_github_repo/README.md', path
+      }) do
+        diffs = @scm.diff(@repo, 'shashafrom', 'shashato')
+        assert_equal renamed_diffs, diffs
+      end
+    end
+  end
+
+  def test_diff_Githubに変更差分のあるファイルパスとコミットSHAが渡される場合
+    file_from = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
+    file_to = TestFile.new(status: 'modifies', filename: "farend/redmine_github_repo/README.md", patch:'+mod_line')
+    cat = "add_line"
+    commit_from = OctokitCommit.new(sha: 'shashafrom')
+    commit_to = OctokitCommit.new(sha: 'shashato')
+    compare = OctokitCompare.new(base_commit: commit_from, commits: [commit_to], files: [file_to, file_from])
+
+    modified_diffs = [
+      "diff",
+      "--- a/#{file_from.filename}",
+      "+++ b/#{file_to.filename}",
+      "#{file_to.patch}",
+      "diff",
+      "--- /dev/null",
+      "+++ b/#{file_from.filename}",
+      "@@ -0,0 +1,2 @@",
+      "+#{cat}"
+    ]
+
+    Octokit.stub(:compare, build_mock(compare, []) { |repos, sha|
+      assert_equal @repo, repos
+    }) do
+      @scm.stub(:cat, build_mock(cat, []) { |path, identifier|
+        assert_equal 'farend/redmine_github_repo/README.md', path
+      }) do
+          diffs = @scm.diff(@repo, "shashafrom", "shashato")
+          assert_equal modified_diffs, diffs
+      end
+    end
+  end
+
+  def test_diff_Githubに削除差分のあるファイルパスとコミットSHAが渡される場合
+    file_from = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
+    file_to = TestFile.new(status: 'removed', filename: "farend/redmine_github_repo/README.md", patch:'-add_line')
+    cat = "add_line"
+    commit_from = OctokitCommit.new(sha: 'shashafrom')
+    commit_to = OctokitCommit.new(sha: 'shashato')
+    compare = OctokitCompare.new(base_commit: commit_from, commits: [commit_to], files: [file_from, file_to])
+
+    removed_diffs = [
+      "diff",
+      "--- /dev/null",
+      "+++ b/#{file_from.filename}",
+      "@@ -0,0 +1,2 @@",
+      "+#{cat}",
+      "diff",
+      "--- a/#{file_from.filename}",
+      "+++ /dev/null",
+      "@@ -1,2 +0,0 @@",
+      "-[]"
+    ]
+
+    Octokit.stub(:compare, build_mock(compare, []) { |repos, sha|
+      assert_equal @repo, repos
+    }) do
+      @scm.stub(:cat, build_mock(cat, []) { |path, identifier|
+        assert_equal 'farend/redmine_github_repo/README.md', path
+      }) do
+          diffs = @scm.diff(@repo, "shashafrom", "shashato")
+          assert_equal removed_diffs, diffs
+      end
+    end
+  end
+
+  def test_default_branch_Githubの戻り値が存在する場合
+    branch = OctokitBranch.new(name: 'main', commit: OctokitCommit.new(sha: 'shashasha'))
+    Octokit.stub(:branches, build_mock([branch], []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      assert_equal 'main', @scm.default_branch
+    end
+  end
+
+  def test_default_branch_Githubの戻り値が存在しない場合
+    Octokit.stub(:branches, build_mock([], []) { |repos, rev|
+      assert_equal @repo, repos
+    }) do
+      assert_equal nil, @scm.default_branch
+    end
+  end
+
+  def test_entry_Githubに引数を渡す場合
+    content = OctokitContent.new(name: 'README.md', path: @repo, type: 'file', size: 256)
+    lastrev = OctokitRevision.new(identifier:'shashasha')
+
+    Octokit.stub(:contents, build_mock([content], []) { |repos, path, ref|
+      assert_equal @repo, repos
+    }) do
+      @scm.stub(:lastrev, build_mock(lastrev, []) { |repos, rev|
+        assert_equal @repo, repos
+      }) do
+        entry = @scm.entry('README.md')
+        assert_equal 'README.md', entry.name
+        assert_equal 'file', entry.kind
+        assert_equal @repo, entry.path
+        assert_equal 256, entry.size
+      end
+    end
+  end
+
+  def test_entry_Githubに引数を渡さない場合
+    Octokit.stub(:contents, build_mock([], []) { |repos, path, ref|
+      assert_equal @repo, repos
+    }) do
+      entry = @scm.entry
+      assert_equal 'dir', entry.kind
+      assert_equal '', entry.path
+    end
+  end
+
+  def test_cat_Githubで取得ファイルのエンコードが不要な場合
+    blob = OctokitContent.new(path: @repos, sha: 'shashasha', download_url: 'http://download/url',
+                              encoding: 'utf-8', content: 'test_content')
+    get = OctokitGet.new(headers:{ "content-type" => 'text/html; charset=utf-8'})
+    Octokit.stub(:contents, build_mock(blob, []) { |repos, path, ref|
+      assert_equal @repo, repos
+    }) do
+      Octokit.stub(:get, build_mock(get, []) { |url|
+        assert_equal 'http://download/url', url
+      }) do
+        Octokit.stub(:last_response, build_mock(get, [])) do
+          assert_equal 'test_content', @scm.cat(@repos)
+        end
+      end
+    end
+  end
+
+  def test_cat_Githubで取得ファイルがエンコードが必要な場合
+    blob = OctokitContent.new(path: @repos, sha: 'shashasha', download_url: 'http://download/url',
+                              encoding: 'base64', content: 'dGVzdF9jb250ZW50')
+    get = OctokitGet.new(headers:{ "content-type" => 'text/html; charset=base64'})
+    Octokit.stub(:contents, build_mock(blob, []) { |repos, path, ref|
+      assert_equal @repo, repos
+    }) do
+      Octokit.stub(:get, build_mock(get, []) { |url|
+        assert_equal 'http://download/url', url
+      }) do
+        Octokit.stub(:last_response, build_mock(get, [])) do
+          assert_equal 'test_content', @scm.cat(@repos)
+        end
+      end
+    end
+  end
+
+  def test_cat_Githubで取得ファイルがバイナリ形式の場合
+    blob = OctokitContent.new(path: @repos, sha: 'shashasha', download_url: 'http://download/url')
+    get = OctokitGet.new(headers:{ "content-type" => 'binary'})
+    Octokit.stub(:contents, build_mock(blob, []) { |repos, path, ref|
+      assert_equal @repo, repos
+    }) do
+      Octokit.stub(:get, build_mock(get, []) { |url|
+        assert_equal 'http://download/url', url
+      }) do
+        Octokit.stub(:last_response, build_mock(get, [])) do
+          assert_equal '', @scm.cat(@repos)
+        end
+      end
+    end
+  end
+
   ## 以下、Octokitのモックに使う部品たち ##
 
   OctokitBranch = Struct.new(:name, :commit, :sha, keyword_init: true)
   OctokitCommit = Struct.new(:sha, :commit, :parents, :files, keyword_init: true)
-  OctokitContent = Struct.new(:sha, :name, :path, :type, :size, :download_url, keyword_init: true)
+  OctokitContent = Struct.new(:sha, :name, :path, :type, :size, :download_url, :content, :encoding, keyword_init: true)
   OctokitRevision = Struct.new(:identifier, :author, :committer, :tree, :message, :paths, keyword_init: true)
   OctokitAuthor = Struct.new(:name, keyword_init: true)
   OctokitCommiter = Struct.new(:date, keyword_init: true)
   OctokitTree = Struct.new(:tree, :sha, keyword_init: true)
-  TestFile = Struct.new(:status, :filename, :from_revision, keyword_init: true)
+  OctokitCompare = Struct.new(:base_commit, :commits, :files, keyword_init: true)
+  OctokitGet = Struct.new(:headers, keyword_init: true) 
+  TestFile = Struct.new(:status, :filename, :previous_filename, :from_revision, :patch, keyword_init: true)
 
   def build_mock(*returns, &proc)
     mock = Minitest::Mock.new
