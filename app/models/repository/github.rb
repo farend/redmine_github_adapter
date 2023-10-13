@@ -34,6 +34,7 @@ class Repository::Github < Repository
     scm.branches
   end
 
+  # リモートリポジトリの最新状況を取得し、changesetに反映する
   def fetch_changesets(options = {})
     opts = options.merge({
       last_committed_date: extra_info&.send(:[], "last_committed_date"),
@@ -56,6 +57,8 @@ class Repository::Github < Repository
     save(validate: false)
   end
 
+  # revisionオブジェクトの配列を引数に受け取る
+  # 引数に未反映のrevisionが含まれる場合、changesetオブジェクトを作成し保存・更新を行う
   def save_revisions!(revisions, revisions_copy)
     limit = 100
     offset = 0
@@ -96,6 +99,8 @@ class Repository::Github < Repository
   end
   private :save_revisions!
 
+  # nameにコミットのSHAを受け取る
+  # nameにリビジョン名が一致する、もしくは部分一致するscmidを持つchangeset一件を返す
   def find_changeset_by_name(name)
     if name.present?
       changesets.find_by(revision: name.to_s) ||
@@ -103,6 +108,9 @@ class Repository::Github < Repository
     end
   end
 
+  # pathにファイルパス、identifierにコミットのshaを受け取る
+  # scmから引数に該当するエントリを配列で返す
+  # 既にキャッシュが存在し引数が空でないなら、root階層ファイルセットの参照時キャッシュを使用する
   def scm_entries(path=nil, identifier=nil)
     is_using_cache = using_root_fileset_cache?(path, identifier)
 
@@ -152,6 +160,8 @@ class Repository::Github < Repository
     entries
   end
 
+  # pathにファイルパス、revにコミットのshaを受け取る
+  # rev時点のpath以下のファイルに該当するchengesetsを取得し配列で返す
   def latest_changesets(path, rev, limit = 10)
     revisions = scm.revisions(path, nil, rev, :limit => limit, :all => false)
 
@@ -177,6 +187,9 @@ class Repository::Github < Repository
   def properties(path, rev)
   end
 
+  # scm_entries内でroot階層ファイルセットの参照にキャッシュを使用するための判定
+  # 引数が与えられなければfalseを返す
+  # trueを返す場合、identifierにデフォルトブランチを代入する
   def using_root_fileset_cache?(path, identifier)
     return false if path.present?
     return false if identifier.blank?
