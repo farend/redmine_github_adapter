@@ -226,7 +226,7 @@ module Redmine
             if path.length > 0
               next if github_diff.filename != path && !github_diff.filename.include?("#{path}/")
             end
-            
+
             case github_diff.status
             when "renamed"
               diff << "diff"
@@ -308,6 +308,7 @@ module Redmine
           begin
             blob = Octokit.contents(@repos, path: path, ref: identifier)
             url = blob.download_url
+
           rescue Octokit::NotFound
             commit = Octokit.commit(@repos, identifier).files.select{|c| c.filename == path }.first
             blob = Octokit.blob(@repos, commit.sha)
