@@ -181,7 +181,7 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
-        # 複数のrevisionオブジェクトをを配列として受け取り、該当コミットの変更状況をhashにする
+        # 複数のrevisionオブジェクトを配列として受け取り、該当コミットの変更状況をhashにする
         # 作成したhashを各revisionオブジェクトのpathsパラメータに追記する
         def get_filechanges_and_append_to(revisions)
           revisions.each do |revision|

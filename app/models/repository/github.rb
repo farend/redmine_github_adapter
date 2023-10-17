@@ -44,7 +44,7 @@ class Repository::Github < Repository
 
     revisions = scm.revisions('', nil, nil, opts)
     revisions_copy = revisions.clone # revisions will change
-
+    
     return if revisions.blank?
 
     save_revisions!(revisions, revisions_copy)
@@ -140,7 +140,6 @@ class Repository::Github < Repository
     # Not found in cache, get entries from SCM
     if entries.blank?
       entries = scm.entries(path, identifier, :report_last_commit => report_last_commit)
-
       # Save as cache
       if changeset.present?
         GithubAdapterRootFileset.where(repository_id: self.id, revision: identifier).delete_all
@@ -169,7 +168,7 @@ class Repository::Github < Repository
 
     if rev != default_branch
       # Branch that is not default doesn't be synced automatically. so, save it here.
-      save_revisions!(revisions, revisions.dup)
+      save_revisions!(revisions.dup, revisions.dup)
     end
 
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
