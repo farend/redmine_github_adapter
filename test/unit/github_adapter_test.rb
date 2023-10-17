@@ -296,6 +296,29 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
+  def test_revisions_Githubのallオプションにtrueが与えられる場合
+    parents = []
+    commits = 3.times.map { |i|
+      author = OctokitAuthor.new(name: "Author#{i}")
+      committer = OctokitCommiter.new(date: "2023-01-00 0#{i}:00:00")
+      parents << OctokitCommit.new(sha: "shashasha#{i-1}") if i > 0
+      rev = OctokitRevision.new(identifier: "shashasha#{i+1}", author: author, 
+                                committer: committer, message: 'commit message')
+      OctokitCommit.new(sha: "shashasha#{i+1}", commit: rev, parents: parents.dup)
+    }
+    options = { path: @repo, per_page: 1, all: true, last_committed_id: 'shashasha3'}
+
+    Octokit.stub(:commits, build_two_mock(commits, []) { |repo|
+      assert_equal @repo, repo
+    }) do
+      revisions = @scm.revisions(@repo, nil, nil, options)
+      
+      assert_equal 3, revisions.size
+      assert_equal ["shashasha0", "shashasha1"], revisions.last.parents
+      assert_equal 'Author2', revisions.last.author
+    end
+  end
+
   def test_get_filechanges_and_append_to_Githubに1つのrevisisonが渡される場合
     add_file = TestFile.new(status: "added", filename: "add.md")
     mod_file = TestFile.new(status: "modified", filename: "mod.md")
@@ -581,6 +604,15 @@ class GithubAdapterTest < ActiveSupport::TestCase
   def build_mock(*returns, &proc)
     mock = Minitest::Mock.new
     Array.wrap(returns).each do |ret|
+      mock.expect(:call, ret, &proc)
+    end
+    mock
+  end
+
+  def build_two_mock(*returns, &proc)
+    mock = Minitest::Mock.new
+    Array.wrap(returns).each do |ret|
+      mock.expect(:call, ret, &proc)
       mock.expect(:call, ret, &proc)
     end
     mock
