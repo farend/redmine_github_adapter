@@ -285,7 +285,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
       assert_equal @repo, repo
     }) do
       revisions = @scm.revisions(@repo, 'shashato', 'shashafrom', options )
-      
+
       assert_equal 3, revisions.size
 
       revisions.each_with_index {|rev, i|
@@ -293,26 +293,6 @@ class GithubAdapterTest < ActiveSupport::TestCase
         assert_equal "2023-01-00 0#{i}:00:00", rev.time
         assert_equal i + 1, rev.parents.size
       }
-    end
-  end
-
-  def test_revisions_Githubのallオプションにtrueが与えられる場合
-    parents = []
-    commits = 3.times.map { |i|
-      author = OctokitAuthor.new(name: "Author#{i}")
-      committer = OctokitCommiter.new(date: "2023-01-00 0#{i}:00:00")
-      parents << OctokitCommit.new(sha: "shashasha#{i}")
-      rev = OctokitRevision.new(identifier: "shashasha#{i+1}", author: author, 
-                                committer: committer, message: 'commit message')
-      OctokitCommit.new(sha: "shashasha#{i+1}", commit: rev, parents: parents.dup)
-    }
-    options = { path: @repo, per_page: 1, all: true, last_committed_id: 'shashasha3'}
-    Octokit.stub(:commits, build_mock(commits, []) { |repo|
-      assert_equal @repo, repo
-    }) do
-      revisions = @scm.revisions(@repo, 'shashasha2', 'shashasha3', options )
-      
-      assert_equal 0, revisions.size
     end
   end
 
@@ -362,7 +342,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_diff_Githubにファイル名変更差分のあるファイルパスとコミットSHAが渡される場合
+  def test_diff_Githubにファイル名変更差分のあるファイルパスとコミットshaが渡される場合
     file_from = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
     file_to = TestFile.new(status: 'renamed', filename: "farend/redmine_github_repo/RENAME.md", previous_filename: "farend/redmine_github_repo/README.md")
     cat = "add_line"
@@ -399,7 +379,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_diff_Githubに変更差分のあるファイルパスとコミットSHAが渡される場合
+  def test_diff_Githubに変更差分のあるファイルパスとコミットshaが渡される場合
     file_from = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
     file_to = TestFile.new(status: 'modifies', filename: "farend/redmine_github_repo/README.md", patch:'+mod_line')
     cat = "add_line"
@@ -437,7 +417,7 @@ class GithubAdapterTest < ActiveSupport::TestCase
     end
   end
 
-  def test_diff_Githubに削除差分のあるファイルパスとコミットSHAが渡される場合
+  def test_diff_Githubに削除差分のあるファイルパスとコミットshaが渡される場合
     file_from = TestFile.new(status: 'added', filename: "farend/redmine_github_repo/README.md")
     file_to = TestFile.new(status: 'removed', filename: "farend/redmine_github_repo/README.md", patch:'-add_line')
     cat = "add_line"

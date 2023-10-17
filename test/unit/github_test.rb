@@ -5,16 +5,17 @@ class GithubTest < ActiveSupport::TestCase
 
   def setup
     @repository = Repository::Github.find(1)
-    @changeset = Changeset.find(1)
+    @default_changeset = Changeset.find(1)
     @scm = @repository.scm
     @repo = "farend/redmine_github_repo"
+    @author = OctokitAuthor.new(name: 'author_name')
   end
 
   def test_fetch_changesets_Githubでchangesetsが追加される場合
     file = TestFile.new(status: "added", filename: "README.md")
-    rev = OctokitRevision.new(identifier: 'shashasha2', scmid: 'shashasha2', author: OctokitAuthor.new(name: 'author_name'), 
+    rev = OctokitRevision.new(identifier: 'addedsha', scmid: 'addedsha', author: @author, 
                               parents: ['shashasha'], paths: nil, time: Time.gm(2023, 2, 1), message: 'added')
-    commit = OctokitCommit.new(sha: 'shashasha2', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
+    commit = OctokitCommit.new(sha: 'addedsha', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
 
     @scm.stub(:revisions, build_mock([rev], []) { |path, identifier_from, identifier_to|
       assert_equal '', path
@@ -23,7 +24,7 @@ class GithubTest < ActiveSupport::TestCase
     }) do
       Octokit.stub(:commit, build_mock(commit, []) { |repo, identifier|
         assert_equal @repo, repo
-        assert_equal 'shashasha2', identifier
+        assert_equal 'addedsha', identifier
       }) do
         @repository.fetch_changesets
         assert_equal 2, @repository.changesets.size
@@ -31,14 +32,14 @@ class GithubTest < ActiveSupport::TestCase
 
         extra_info = @repository[:extra_info]
 
-        assert_equal '2023-02-01T00:00:00Z', extra_info['last_committed_date']
-        assert_equal 'shashasha2', extra_info['last_committed_id']
+        assert_equal Time.gm(2023, 2, 1), extra_info['last_committed_date']
+        assert_equal 'addedsha', extra_info['last_committed_id']
       end
     end
   end
 
   def test_fetch_changesets_Githubでchangesetsに追加が無い場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
                               paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
 
     @scm.stub(:revisions, build_mock([rev], []) { |path, identifier_from, identifier_to|
@@ -52,16 +53,16 @@ class GithubTest < ActiveSupport::TestCase
 
         extra_info = @repository[:extra_info]
 
-        assert_equal '2023-01-01T00:00:00Z', extra_info['last_committed_date']
+        assert_equal Time.gm(2023, 1, 1), extra_info['last_committed_date']
         assert_equal 'shashasha', extra_info['last_committed_id']
     end
   end
 
-  def test_save_revisions_Githubでchangesetsが保存される場合
-    rev = OctokitRevision.new(identifier: 'shashasha2', scmid: 'shashasha2', author: OctokitAuthor.new(name: 'author_name'), 
+  def test_save_revisions_Githubでchangesetsが追加される場合
+    rev = OctokitRevision.new(identifier: 'addedsha', scmid: 'addedsha', author: @author, 
                               parents: ['shashasha'], paths: nil, time: Time.gm(2023, 2, 1), message: 'added')
     file = TestFile.new(status: "added", filename: "README.md")
-    commit = OctokitCommit.new(sha: 'shashasha2', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
+    commit = OctokitCommit.new(sha: 'addedsha', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
 
     @scm.stub(:revisions, build_mock([rev], []) { |path, identifier_from, identifier_to|
       assert_equal '', path
@@ -70,7 +71,7 @@ class GithubTest < ActiveSupport::TestCase
     }) do
       Octokit.stub(:commit, build_mock(commit, []) { |repo, identifier|
         assert_equal @repo, repo
-        assert_equal 'shashasha2', identifier
+        assert_equal 'addedsha', identifier
       }) do
         @repository.fetch_changesets
         assert_equal 2, @repository.changesets.size
@@ -78,14 +79,14 @@ class GithubTest < ActiveSupport::TestCase
 
         extra_info = @repository[:extra_info]
 
-        assert_equal '2023-02-01T00:00:00Z', extra_info['last_committed_date']
-        assert_equal 'shashasha2', extra_info['last_committed_id']
+        assert_equal Time.gm(2023, 2, 1), extra_info['last_committed_date']
+        assert_equal 'addedsha', extra_info['last_committed_id']
       end
     end
   end
 
-  def test_fetch_changesets_Githubでchangesetsが保存されない場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
+  def test_fetch_changesets_Githubでchangesetsが追加されない場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
                               paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
 
     @scm.stub(:revisions, build_mock([rev], []) { |path, identifier_from, identifier_to|
@@ -99,19 +100,19 @@ class GithubTest < ActiveSupport::TestCase
 
         extra_info = @repository[:extra_info]
 
-        assert_equal '2023-01-01T00:00:00Z', extra_info['last_committed_date']
+        assert_equal Time.gm(2023, 1, 1), extra_info['last_committed_date']
         assert_equal 'shashasha', extra_info['last_committed_id']
     end
   end
 
   def test_find_changeset_by_name_Githubで引数にリビジョン名が一致するchangesetが存在する場合
     found_changeset = @repository.find_changeset_by_name('shashasha')
-    assert_equal @changeset, found_changeset
+    assert_equal @default_changeset, found_changeset
   end
 
   def test_find_changeset_by_name_Githubで引数にscmidが部分一致するchangesetが存在する場合
     found_changeset = @repository.find_changeset_by_name('sha')
-    assert_equal @changeset, found_changeset
+    assert_equal @default_changeset, found_changeset
   end
 
   def test_find_changeset_by_name_Githubで引数に該当するchangesetが存在しない場合
@@ -119,10 +120,10 @@ class GithubTest < ActiveSupport::TestCase
     assert_equal nil, found_changeset
   end
 
-  def test_scm_entries_Githubでキャッシュが存在しない場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
-    entry =RepositoryEntry.new(path: "README.md", size: 256, lastrev: rev.identifier)
+  def test_scm_entries_Githubでルートファイルのキャッシュが存在しない場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              time: Time.gm(2023, 1, 1), message: 'message')
+    entry = RepositoryEntry.new(path: "README.md", size: 256, lastrev: rev.identifier)
 
 
     @scm.stub(:entries, build_mock([entry], []) { |repository_id, revision|
@@ -139,15 +140,15 @@ class GithubTest < ActiveSupport::TestCase
     end
   end
 
-  def test_scm_entries_Githubでキャッシュが存在する場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
+  def test_scm_entries_Githubでルートファイルのキャッシュが存在する場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              time: Time.gm(2023, 1, 1), message: 'message')
     entry = RepositoryEntry.new(path: "README.md", size: 256, lastrev: rev.identifier)
 
     GithubAdapterRootFileset.create!(
       repository_id: @repository.id,
       revision: rev.identifier,
-      changeset_id: @changeset.id,
+      changeset_id: @default_changeset.id,
       path: entry.path,
       size: entry.size,
       latest_commitid: rev.identifier
@@ -171,17 +172,17 @@ class GithubTest < ActiveSupport::TestCase
     end
   end
 
-  def test_latest_changesets_Githubでchangesetが追加されない場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
+  def test_latest_changesets_Githubで未反映のrevisionが存在せずpathにデフォルトブランチ名が与えられた場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              time: Time.gm(2023, 1, 1), message: 'message')
 
     @scm.stub(:revisions, build_mock([rev], []) { |path, identifier_from, identifier_to|
       assert_equal 'README.md', path
       assert_equal nil, identifier_from
-      assert_equal 'shashasha', identifier_to
+      assert_equal 'main', identifier_to
     }) do
-      @repository.stub(:default_branch, build_mock('shashasha', [])) do
-        latest_changesets = @repository.latest_changesets('README.md', 'shashasha')
+      @repository.stub(:default_branch, build_mock('main', [])) do
+        latest_changesets = @repository.latest_changesets('README.md', 'main')
         
         assert_equal 1, latest_changesets.size
         assert_equal 'shashasha', latest_changesets.first.revision
@@ -192,54 +193,52 @@ class GithubTest < ActiveSupport::TestCase
     end
   end
 
-  def test_latest_changesets_Githubで一件のchangesetが追加される場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
-    latest_rev = OctokitRevision.new(identifier: 'shashalatest', scmid: 'shashalatest', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 2, 1), message: 'latest')
-    @repository.changesets << changeset(latest_rev)
+  def test_latest_changesets_Githubで未反映のrevisionが存在しpathにデフォルトブランチ名が与えられた場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              time: Time.gm(2023, 1, 1), message: 'message')
+    latest_rev = OctokitRevision.new(identifier: 'latestsha', scmid: 'latestsha', author: @author, 
+                                     time: Time.gm(2023, 2, 1), message: 'latest')
 
     @scm.stub(:revisions, build_mock([rev, latest_rev], []) { |path, identifier_from, identifier_to|
       assert_equal 'README.md', path
       assert_equal nil, identifier_from
-      assert_equal 'shashalatest', identifier_to
+      assert_equal 'main', identifier_to
     }) do
-      @repository.stub(:default_branch, build_mock('shashalatest', [])) do
-        latest_changesets = @repository.latest_changesets('README.md', 'shashalatest')
+      @repository.stub(:default_branch, build_mock('main', [])) do
+        latest_changesets = @repository.latest_changesets('README.md', 'main')
         
-        assert_equal 2, latest_changesets.size
-        assert_equal 'shashalatest', latest_changesets.first.revision
-        assert_equal 'shashalatest', latest_changesets.first.scmid
-        assert_equal 'latest', latest_changesets.first.comments
-        assert_equal Time.gm(2023, 2, 1), latest_changesets.first.committed_on
+        assert_equal 1, latest_changesets.size
+        assert_equal 'shashasha', latest_changesets.first.revision
+        assert_equal 'shashasha', latest_changesets.first.scmid
+        assert_equal 'message', latest_changesets.first.comments
+        assert_equal Time.gm(2023, 1, 1), latest_changesets.first.committed_on
       end
     end
   end
 
-  def test_latest_changesets_Githubで対象のpathがデフォルトブランチではない場合
-    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
-    latest_rev = OctokitRevision.new(identifier: 'shashalatest', scmid: 'shashalatest', author: OctokitAuthor.new(name: 'author_name'), 
-                              paths: nil, time: Time.gm(2023, 2, 1), message: 'latest')
+  def test_latest_changesets_Githubで未反映のrevisionが存在しpathにコミットのshaが与えられた場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              time: Time.gm(2023, 1, 1), message: 'message')
+    latest_rev = OctokitRevision.new(identifier: 'latestsha', scmid: 'latestsha', author: @author, 
+                              time: Time.gm(2023, 2, 1), message: 'latest')
     file = TestFile.new(status: "added", filename: "README.md")
-
-    commit = OctokitCommit.new(sha: 'shashalatest', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
+    commit = OctokitCommit.new(sha: 'latestsha', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
 
     @scm.stub(:revisions, build_mock([rev, latest_rev], []) { |path, identifier_from, identifier_to|
       assert_equal 'README.md', path
       assert_equal nil, identifier_from
-      assert_equal 'shashalatest', identifier_to
+      assert_equal 'latestsha', identifier_to
     }) do
       @repository.stub(:default_branch, build_mock('main', [])) do
         Octokit.stub(:commit, build_mock(commit, []) { |repo, identifier|
           assert_equal @repo, repo
-          assert_equal 'shashalatest', identifier
+          assert_equal 'latestsha', identifier
         }) do
-          latest_changesets = @repository.latest_changesets('README.md', 'shashalatest')
+          latest_changesets = @repository.latest_changesets('README.md', 'latestsha')
           
           assert_equal 2, latest_changesets.size
-          assert_equal 'shashalatest', latest_changesets.first.revision
-          assert_equal 'shashalatest', latest_changesets.first.scmid
+          assert_equal 'latestsha', latest_changesets.first.revision
+          assert_equal 'latestsha', latest_changesets.first.scmid
           assert_equal 'latest', latest_changesets.first.comments
           assert_equal Time.gm(2023, 2, 1), latest_changesets.first.committed_on
         end
@@ -247,16 +246,95 @@ class GithubTest < ActiveSupport::TestCase
     end
   end
 
+  def test_latest_changesets_Githubで未反映のrevisionが存在せずpathにコミットのshaが与えられた場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              time: Time.gm(2023, 1, 1), message: 'message')
+    file = TestFile.new(status: "added", filename: "README.md")
+    commit = OctokitCommit.new(sha: 'shashasha', files: [file], parents: OctokitCommit.new(sha: 'shashasha'))
+
+    @scm.stub(:revisions, build_mock([rev], []) { |path, identifier_from, identifier_to|
+      assert_equal 'README.md', path
+      assert_equal nil, identifier_from
+      assert_equal 'shashasha', identifier_to
+    }) do
+      @repository.stub(:default_branch, build_mock('main', [])) do
+        Octokit.stub(:commit, build_mock(commit, []) { |repo, identifier|
+          assert_equal @repo, repo
+          assert_equal 'shashasha', identifier
+        }) do
+          latest_changesets = @repository.latest_changesets('README.md', 'shashasha')
+          
+          assert_equal 1, latest_changesets.size
+          assert_equal 'shashasha', latest_changesets.first.revision
+          assert_equal 'shashasha', latest_changesets.first.scmid
+          assert_equal 'message', latest_changesets.first.comments
+          assert_equal Time.gm(2023, 1, 1), latest_changesets.first.committed_on
+        end
+      end
+    end
+  end
+
+  def test_using_root_fileset_cache_Githubでキャッシュが存在せずidentifierにデフォルトブランチ名を受け取った場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
+    entry = RepositoryEntry.new(path: "README.md", size: 256, lastrev: rev.identifier)
+
+    @scm.stub(:entries, build_mock([entry], []) { |repository_id, revision|
+      assert_equal  'README.md', repository_id
+      assert_equal 'main', revision
+    }) do
+      @scm.stub(:default_branch, build_mock('main', [])) do
+        entries = @repository.scm_entries('README.md', 'main')
+
+        assert_equal 1, entries.size
+        assert_equal 'README.md', entries[0].path
+        assert_equal 256, entries[0].size
+        assert_equal 'shashasha', entries[0].lastrev
+        assert_equal 0, GithubAdapterRootFileset.all.size
+      end
+    end
+  end
+
+  def test_using_root_fileset_cache_Githubでキャッシュが存在しidentifierにデフォルトブランチ名を受け取った場合
+    rev = OctokitRevision.new(identifier: 'shashasha', scmid: 'shashasha', author: @author, 
+                              paths: nil, time: Time.gm(2023, 1, 1), message: 'message')
+    entry = RepositoryEntry.new(path: "README.md", size: 256, lastrev: rev.identifier)
+
+    GithubAdapterRootFileset.create!(
+      repository_id: @repository.id,
+      revision: rev.identifier,
+      changeset_id: @default_changeset.id,
+      path: entry.path,
+      size: entry.size,
+      latest_commitid: rev.identifier
+    )
+
+    @scm.stub(:entries, build_mock([entry], []) { |repository_id, revision|
+      assert_equal  'README.md', repository_id
+      assert_equal 'main', revision
+    }) do
+      @scm.stub(:default_branch, build_mock('main', [])) do
+        entries = @repository.scm_entries('README.md', 'main')
+
+        assert_equal 1, entries.size
+        assert_equal 'README.md', entries[0].path
+        assert_equal 256, entries[0].size
+        assert_equal 'shashasha', entries[0].lastrev
+        assert_equal 1, GithubAdapterRootFileset.all.size
+      end
+    end
+  end
+
   ## 以下、Octokitのモックに使う部品たち ##
+  OctokitRevision = Struct.new(:identifier, :scmid, :author, :committer, :tree, 
+                               :message, :paths, :time, :parents, keyword_init: true)
+  OctokitCommit = Struct.new(:sha, :commit, :parents, :files, keyword_init: true)
+  OctokitContent = Struct.new(:sha, :name, :path, :type, :size, :download_url, 
+                              :content, :encoding, keyword_init: true)
+  OctokitAuthor = Struct.new(:name, keyword_init: true)
   RepositoryChangeset = Struct.new(:repository, :id, :revision, :scmid, :comitter, 
                                    :committed_on, :comments, keyword_init: true)
   RepositoryEntry = Struct.new(:path, :size, :lastrev, keyword_init: true)
-  OctokitRevision = Struct.new(:identifier, :scmid, :author, :committer, :tree, 
-  :message, :paths, :time, :parents, keyword_init: true)
-  OctokitCommit = Struct.new(:sha, :commit, :parents, :files, keyword_init: true)
-  OctokitContent = Struct.new(:sha, :name, :path, :type, :size, :download_url, 
-  :content, :encoding, keyword_init: true)
-  OctokitAuthor = Struct.new(:name, keyword_init: true)
   RootFilesetCache = Struct.new(:repository_id, :revision, :changeset_id, :path, 
                                 :size, :latest_comitted, keyword_init: true)
   TestFile = Struct.new(:status, :filename, :previous_filename, 

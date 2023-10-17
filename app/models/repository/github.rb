@@ -34,7 +34,7 @@ class Repository::Github < Repository
     scm.branches
   end
 
-  # リモートリポジトリの最新状況を取得し、changesetに反映する
+  # リモートリポジトリの最新状況を取得し、changesetsに反映する
   def fetch_changesets(options = {})
     opts = options.merge({
       last_committed_date: extra_info&.send(:[], "last_committed_date"),
@@ -159,8 +159,9 @@ class Repository::Github < Repository
     entries
   end
 
-  # pathにファイルパス、revにコミットのshaを受け取る
+  # pathにファイルパス、revにコミットのshaもしくはブランチ名を受け取る
   # rev時点のpath以下のファイルに該当するchengesetsを取得し配列で返す
+  # revがデフォルトブランチ名以外の場合、未反映のrevisionを保存しchangesetを追加する
   def latest_changesets(path, rev, limit = 10)
     revisions = scm.revisions(path, nil, rev, :limit => limit, :all => false)
 
@@ -187,8 +188,8 @@ class Repository::Github < Repository
   end
 
   # scm_entries内でroot階層ファイルセットの参照にキャッシュを使用するための判定
-  # 引数が与えられなければfalseを返す
-  # trueを返す場合、identifierにデフォルトブランチを代入する
+  # 引数が与えられない場合・キャッシュが存在しない場合はfalseを返す
+  # キャッシュが見つからない場合でも、identifierがデフォルトブランチ名と一致するならtrueを返す
   def using_root_fileset_cache?(path, identifier)
     return false if path.present?
     return false if identifier.blank?

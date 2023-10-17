@@ -114,9 +114,9 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
         
-        # pathにファイル・ディレクトリのパス, identifier_from/identifier_toにコミットのSHAを受け取る
-        # allオプションがtrueの場合、
+        # pathにファイル・ディレクトリのパス, identifier_from/identifier_toにコミットのshaを受け取る
         # 引数で与えられた条件に合致するコミットをRevisionオブジェクトの配列として返す
+        # allオプションがtrueの場合、リポジトリの全てのrevisionを取得する
         # 配列はコミット日時の降順でソートされる
         def revisions(path, identifier_from, identifier_to, options={})
           path ||= ''
@@ -132,7 +132,6 @@ module Redmine
             0.step do |i|
               start_page = i * MAX_PAGES + 1
               github_commits = Octokit.commits(@repos, api_opts.merge(page: start_page))
-
               # if fetched latest commit, github_commits.length is 1, and github_commits[0][:sha] == latest_committed_id
               return [] if i == 0 && github_commits.none?{ |commit| commit.sha != options[:last_committed_id] }
 
