@@ -306,10 +306,11 @@ class GithubAdapterTest < ActiveSupport::TestCase
                                 committer: committer, message: 'commit message')
       OctokitCommit.new(sha: "shashasha#{i+1}", commit: rev, parents: parents.dup)
     }
-    options = { path: @repo, per_page: 1, all: true, last_committed_id: 'shashasha3'}
+    options = { path: @repo, per_page: 1, all: true}
 
-    Octokit.stub(:commits, build_two_mock(commits, []) { |repo|
+    Octokit.stub(:commits, build_mock(commits, commits, []) { |repo, api_opts|
       assert_equal @repo, repo
+      assert_equal true, api_opts[:all]
     }) do
       revisions = @scm.revisions(@repo, nil, nil, options)
       
@@ -604,15 +605,6 @@ class GithubAdapterTest < ActiveSupport::TestCase
   def build_mock(*returns, &proc)
     mock = Minitest::Mock.new
     Array.wrap(returns).each do |ret|
-      mock.expect(:call, ret, &proc)
-    end
-    mock
-  end
-
-  def build_two_mock(*returns, &proc)
-    mock = Minitest::Mock.new
-    Array.wrap(returns).each do |ret|
-      mock.expect(:call, ret, &proc)
       mock.expect(:call, ret, &proc)
     end
     mock
