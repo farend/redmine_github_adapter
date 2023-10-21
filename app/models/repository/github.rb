@@ -44,7 +44,7 @@ class Repository::Github < Repository
 
     revisions = scm.revisions('', nil, nil, opts)
     revisions_copy = revisions.clone # revisions will change
-    
+
     return if revisions.blank?
 
     save_revisions!(revisions, revisions_copy)
@@ -58,7 +58,7 @@ class Repository::Github < Repository
   end
 
   # revisionオブジェクトの配列を引数に受け取る
-  # 引数に未反映のrevisionが含まれる場合、changesetオブジェクトを作成し保存・更新を行う
+  # changesetsテーブルに保存する（すでに保存済みのrevisionはスキップ）
   def save_revisions!(revisions, revisions_copy)
     limit = 100
     offset = 0
@@ -99,8 +99,8 @@ class Repository::Github < Repository
   end
   private :save_revisions!
 
-  # nameにコミットのSHAを受け取る
-  # nameにリビジョン名が一致する、もしくは部分一致するscmidを持つchangeset一件を返す
+  # nameにコミットのSHA1ハッシュを受け取る
+  # nameにリビジョン名が一致する、もしくはscmidに先頭一致するchangeset一件を返す
   def find_changeset_by_name(name)
     if name.present?
       changesets.find_by(revision: name.to_s) ||
@@ -109,8 +109,8 @@ class Repository::Github < Repository
   end
 
   # pathにファイルパス、identifierにコミットのshaを受け取る
-  # scmから引数に該当するエントリを配列で返す
-  # 既にキャッシュが存在し引数が空でないなら、root階層ファイルセットの参照時キャッシュを使用する
+  # scmから引数に該当するエントリを取得し配列で返す
+  # pathが空(ルート)でidentifierがdefault_branchの場合は、ファイルセットの参照時キャッシュを使用する
   def scm_entries(path=nil, identifier=nil)
     is_using_cache = using_root_fileset_cache?(path, identifier)
 
@@ -128,9 +128,9 @@ class Repository::Github < Repository
           path: fileset.path,
           kind: fileset.size.blank? ? 'dir': 'file',
           size: fileset.size,
-          author: latest_changeset.committer,
           lastrev: Redmine::Scm::Adapters::Revision.new(
             identifier: latest_changeset.identifier,
+            author: latest_changeset.committer,
             time: latest_changeset.committed_on
           ),
         )
@@ -161,7 +161,7 @@ class Repository::Github < Repository
 
   # pathにファイルパス、revにコミットのshaもしくはブランチ名を受け取る
   # rev時点のpath以下のファイルに該当するchengesetsを取得し配列で返す
-  # revがデフォルトブランチ名以外の場合、未反映のrevisionを保存しchangesetを追加する
+  # revがデフォルトブランチ以外の場合、未反映のrevisionを保存しchangesetsテーブルに保存する
   def latest_changesets(path, rev, limit = 10)
     revisions = scm.revisions(path, nil, rev, :limit => limit, :all => false)
 
@@ -175,6 +175,8 @@ class Repository::Github < Repository
     changesets.where(:scmid => revisions.map {|c| c.scmid}).to_a
   end
 
+  # このリポジトリが削除された場合のクリーンアップ処理
+  # 紐づくGithubAdapterRootFilesetを削除する
   def clear_changesets
     super
     GithubAdapterRootFileset.where(repository_id: self.id).delete_all
@@ -187,9 +189,8 @@ class Repository::Github < Repository
   def properties(path, rev)
   end
 
-  # scm_entries内でroot階層ファイルセットの参照にキャッシュを使用するための判定
-  # 引数が与えられない場合・キャッシュが存在しない場合はfalseを返す
-  # キャッシュが見つからない場合でも、identifierがデフォルトブランチ名と一致するならtrueを返す
+  # scm_entries内でキャッシュを使用するかどうかの判定
+  # pathがルートで、identifierがデフォルトブランチ(またはデフォルトブランチのSHA1ハッシュ)の場合、true を返す
   def using_root_fileset_cache?(path, identifier)
     return false if path.present?
     return false if identifier.blank?
