@@ -82,7 +82,7 @@ module Redmine
           raise CommandFailed, handle_octokit_error(e)
         end
 
-        # pathにファイル・ディレクトリのパス、revにコミットのSHAもしくはブランチ名を受け取る 
+        # pathにファイル・ディレクトリのパス、revにコミットのSHAもしくはブランチ名を受け取る
         # revに該当するコミット以前でpath以下に変更があった最新のコミットを取得し、Revisionオブジェクトとして返す
         # 引数pathが与えられなかった場合、もしくは該当するコミットが存在しない場合nilを返す
         def lastrev(path, rev)
@@ -113,7 +113,7 @@ module Redmine
         rescue Octokit::Error => e
           raise CommandFailed, handle_octokit_error(e)
         end
-        
+
         # pathにファイル・ディレクトリのパス, identifier_from/identifier_toにコミットのshaを受け取る
         # 引数で与えられた条件に合致するコミットをRevisionオブジェクトの配列として返す
         # allオプションがtrueの場合、リポジトリの全てのrevisionを取得する
@@ -287,7 +287,7 @@ module Redmine
             # Root entry
             Entry.new(:path => '', :kind => 'dir')
           else
-            es = entries(path, identifier, {report_last_commit: true })
+            es = entries(path, identifier, {report_last_commit: false })
             content = es&.find {|e| e.name == path} || es&.first
 
             Entry.new({
