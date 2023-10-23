@@ -1,0 +1,35 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+# This workflow will download a prebuilt Ruby version, install dependencies and run tests with Rake
+# For more information see: https://github.com/marketplace/actions/setup-ruby-jruby-and-truffleruby
+
+name: Run plugin Test
+
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    container:
+      image: redmine:4.2.10-bullseye
+    env:
+      RAILS_ENV: test
+    steps:
+    - name: Setup Env
+      run: |
+        ln -s /usr/src/redmine ./redmine
+        git config --global --add safe.directory /usr/src/redmine/plugins/redmine_github_adapter
+    - uses: actions/checkout@v3
+      with:
+        path: ./redmine/plugins/redmine_github_adapter
+    - name: Run tests
+      run: |
+        cd redmine
+        /docker-entrypoint.sh rails s --help
+        bundle config unset without --local
+        bundle install
+        bundle exec rake redmine:plugins:migrate
+        bundle exec rake redmine:plugins:test RAILS_ENV=test
+
