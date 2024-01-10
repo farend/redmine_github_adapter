@@ -1,6 +1,6 @@
 require 'redmine'
 require File.expand_path('../lib/github_repositories_helper_patch', __FILE__)
-require File.expand_path('../lib/hooks', __FILE__)
+require File.expand_path('../lib/redmine_github_adapter/hooks', __FILE__)
 
 Redmine::Plugin.register :redmine_github_adapter do
   name 'Redmine Github Adapter plugin'
