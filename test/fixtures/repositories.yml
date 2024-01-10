@@ -1,0 +1,14 @@
+default:
+  id: 1
+  project_id: 1
+  url: 'https://github.com/farend/redmine_github_repo.git'
+  login: ''
+  password: ''
+  identifier: 'test_project'
+  type: 'Repository::Github'
+  path_encoding: nil
+  log_encoding: nil
+  is_default: true
+  extra_info:
+    'last_committed_date': ''
+    'last_committed_id': ''
